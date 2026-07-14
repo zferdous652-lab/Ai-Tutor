@@ -40,10 +40,27 @@ Student (web) --quiz answers--> api /progress/quiz-attempt --> QuizAttempt saved
 Parent (web) <--weak chapters-- api /parent/dashboard  (aggregates QuizAttempt by chapter)
 ```
 
-Every AI Gateway call (`summary`, `quiz`, `chat`) goes through one function
-(`apps/api/src/services/llm.ts`) that is the seed of the "AI Gateway" from the full architecture:
-it already centralizes the model call and prompt templates, and is where token counting / caching /
-safety filtering get added later without touching route code.
+Every AI Gateway call (`summary`, `quiz`, `chat`) goes through `apps/api/src/services/llm/` —
+the seed of the "AI Gateway" from the full architecture. It centralizes prompt templates and,
+via a **model router**, provider selection:
+
+```
+services/llm/
+├── types.ts               LlmProvider interface, ProviderError
+├── providers/
+│   ├── anthropic.ts        Claude, via @anthropic-ai/sdk
+│   └── gemini.ts            Gemini, via @google/generative-ai
+├── router.ts                ModelRouter: tries providers in order, falls back on ProviderError
+└── index.ts                 Public API (generateChapterSummary, generateChapterQuiz, tutorReply)
+```
+
+`ANTHROPIC_API_KEY` and `GEMINI_API_KEY` are both optional, but at least one must be set (the API
+fails fast on startup otherwise, with a clear error). If both are set, `MODEL_PROVIDER_ORDER`
+(default `anthropic,gemini`) controls which is tried first; a rate limit, outage, or auth failure
+on the first provider falls back to the next one automatically, so a single provider being down
+doesn't take the whole app down. Token counting / response caching / safety filtering are the
+remaining AI Gateway pieces to add later, at the `ModelRouter` or provider level, without
+touching route code.
 
 ## Data model
 

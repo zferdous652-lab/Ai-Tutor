@@ -39,7 +39,10 @@ cp .env.example .env
 ```
 
 Edit `.env`:
-- `ANTHROPIC_API_KEY` — your Claude API key (required — the app won't start without it)
+- `ANTHROPIC_API_KEY` and/or `GEMINI_API_KEY` — set at least one, or the `api` container exits
+  immediately with a clear error. With both set, `MODEL_PROVIDER_ORDER` (default
+  `anthropic,gemini`) picks the priority order, and the model router automatically falls back to
+  the second provider if the first one rate-limits or errors — see `docs/ARCHITECTURE.md`.
 - `NEXT_PUBLIC_API_URL` — **set this to `http://<VM_PUBLIC_IP>:4000`**, not `localhost`. This value
   gets baked into the browser JavaScript bundle at build time, so it has to be an address your
   laptop's browser can actually reach — `localhost` would resolve to the visitor's own machine,
@@ -85,7 +88,7 @@ it's compiled into the bundle at build time.
    - `mytaman-web` → deploys `apps/web`
 4. **App settings** (Configuration → Application settings) on `mytaman-api`:
    - `DATABASE_URL` — from step 2
-   - `ANTHROPIC_API_KEY` — your Claude API key
+   - `ANTHROPIC_API_KEY` and/or `GEMINI_API_KEY` — at least one required
    - `PORT` — `8080` (App Service's expected port; Express reads `process.env.PORT`)
 5. **App settings** on `mytaman-web`:
    - `NEXT_PUBLIC_API_URL` — the `mytaman-api` App Service URL (e.g. `https://mytaman-api.azurewebsites.net`)
@@ -105,7 +108,7 @@ run pointed at the production connection string).
 ## Local development (no Azure needed)
 
 ```bash
-cp .env.example .env        # fill in ANTHROPIC_API_KEY
+cp .env.example .env        # fill in ANTHROPIC_API_KEY and/or GEMINI_API_KEY
 docker compose up -d postgres  # starts Postgres only
 npm install
 npm run db:migrate --workspace apps/api

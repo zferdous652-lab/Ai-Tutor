@@ -1,18 +1,22 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { env } from "../lib/env";
+import { env } from "../../lib/env";
+import { AnthropicProvider } from "./providers/anthropic";
+import { GeminiProvider } from "./providers/gemini";
+import { ModelRouter } from "./router";
+import { ChatTurn, LlmProvider } from "./types";
 
-// Seed of the "AI Gateway" from the full architecture: every call to the model goes through
-// here, so token counting / caching / safety filtering can be added later without touching
-// route code. Model routing is a single constant for now — swap/branch on it once there's a
-// reason to use more than one model.
-const MODEL = "claude-sonnet-4-5-20250929";
+function buildProvider(config: (typeof env.providers)[number]): LlmProvider {
+  switch (config.name) {
+    case "anthropic":
+      return new AnthropicProvider(config.apiKey);
+    case "gemini":
+      return new GeminiProvider(config.apiKey);
+  }
+}
 
-const client = new Anthropic({ apiKey: env.anthropicApiKey });
+const router = new ModelRouter(env.providers.map(buildProvider));
 
 function languageInstruction(language: string): string {
-  return language === "ms"
-    ? "Respond in Bahasa Malaysia."
-    : "Respond in English.";
+  return language === "ms" ? "Respond in Bahasa Malaysia." : "Respond in English.";
 }
 
 /** Rough token-cost estimate used for Xpoints deduction. Good enough for quota purposes. */
@@ -24,9 +28,7 @@ export async function generateChapterSummary(
   chapterContent: string,
   language: string
 ): Promise<string> {
-  const message = await client.messages.create({
-    model: MODEL,
-    max_tokens: 800,
+  return router.generateText({
     system: `You are an assistant that writes clear, age-appropriate chapter summaries for school
 students. ${languageInstruction(language)}`,
     messages: [
@@ -36,8 +38,8 @@ students. ${languageInstruction(language)}`,
 facts, dates, and terms a student should remember:\n\n${chapterContent}`,
       },
     ],
+    maxTokens: 800,
   });
-  return extractText(message);
 }
 
 export interface QuizQuestion {
@@ -51,9 +53,7 @@ export async function generateChapterQuiz(
   chapterContent: string,
   language: string
 ): Promise<QuizQuestion[]> {
-  const message = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1500,
+  const text = await router.generateText({
     system: `You generate multiple-choice quizzes for school students. ${languageInstruction(
       language
     )} Respond with ONLY a JSON array, no prose, matching this shape:
@@ -66,8 +66,8 @@ student's weak topics.`,
         content: `Generate 5 multiple-choice questions covering this chapter:\n\n${chapterContent}`,
       },
     ],
+    maxTokens: 1500,
   });
-  const text = extractText(message);
   return JSON.parse(extractJsonArray(text)) as QuizQuestion[];
 }
 
@@ -77,9 +77,15 @@ export async function tutorReply(
   studentMessage: string,
   language: string
 ): Promise<string> {
-  const message = await client.messages.create({
-    model: MODEL,
-    max_tokens: 500,
+  const messages: ChatTurn[] = [
+    ...history.map((h) => ({
+      role: h.role === "student" ? ("user" as const) : ("assistant" as const),
+      content: h.content,
+    })),
+    { role: "user" as const, content: studentMessage },
+  ];
+
+  return router.generateText({
     system: `You are a patient Socratic tutor helping a student understand this chapter:
 
 ${chapterContent}
@@ -87,23 +93,9 @@ ${chapterContent}
 Guide the student toward answers with questions and hints rather than stating the answer
 outright, unless they are clearly stuck after a couple of tries or explicitly ask for the answer.
 Keep replies short (2-4 sentences). ${languageInstruction(language)}`,
-    messages: [
-      ...history.map((h) => ({
-        role: h.role === "student" ? ("user" as const) : ("assistant" as const),
-        content: h.content,
-      })),
-      { role: "user", content: studentMessage },
-    ],
+    messages,
+    maxTokens: 500,
   });
-  return extractText(message);
-}
-
-function extractText(message: Anthropic.Message): string {
-  const block = message.content.find((c) => c.type === "text");
-  if (!block || block.type !== "text") {
-    throw new Error("Model response contained no text content");
-  }
-  return block.text;
 }
 
 function extractJsonArray(text: string): string {

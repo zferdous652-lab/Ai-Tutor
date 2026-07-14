@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
+    "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^5.20.0",
     "cors": "^2.8.5",
     "express": "^4.21.1",

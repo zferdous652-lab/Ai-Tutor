@@ -22,7 +22,7 @@ apps/
 ## Quickstart — local dev with hot reload
 
 ```bash
-cp .env.example .env          # fill in ANTHROPIC_API_KEY
+cp .env.example .env          # fill in ANTHROPIC_API_KEY and/or GEMINI_API_KEY
 docker compose up -d postgres  # just the database
 npm install
 npm run db:migrate --workspace apps/api
@@ -33,7 +33,7 @@ npm run dev                    # api on :4000, web on :3000
 ## Quickstart — full stack in Docker (what to run on the Azure VM)
 
 ```bash
-cp .env.example .env          # fill in ANTHROPIC_API_KEY, and NEXT_PUBLIC_API_URL if not localhost
+cp .env.example .env          # fill in ANTHROPIC_API_KEY and/or GEMINI_API_KEY, and NEXT_PUBLIC_API_URL if not localhost
 docker compose up -d --build   # builds & runs postgres + api + web
 docker compose exec api node dist/seed.js   # prints demo user ids
 ```

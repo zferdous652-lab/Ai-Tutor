@@ -1,22 +1,81 @@
-# Deploying the MVP to Azure (no Docker required)
+# Deploying the MVP to Azure
 
-You mentioned Docker isn't set up on your Azure VM yet. Good news: the MVP doesn't need it. Both
-apps in this repo run on plain Node.js, so **Azure App Service (Linux, Node runtime)** can deploy
-straight from GitHub with no container involved. Docker only becomes worth setting up later, when
-the AI Gateway is split into its own containerized service (Phase 2+ — see `docs/MVP_PLAN.md`).
+Two ways to run this on Azure. Both are documented; pick based on what you want right now.
 
-## Recommended Phase 1 setup
+- **Docker on the VM** (this section) — run `docker compose up` directly on your Azure VM. Gives
+  you the fastest way to see the whole stack (web + api + Postgres) running and click through it
+  yourself. Use this now.
+- **Azure App Service, no Docker** (further down) — deploy each app straight from GitHub with no
+  containers at all. A reasonable option later if you'd rather not manage a VM's OS/patching/
+  Docker daemon yourself, but not required — Docker on the VM is a fully valid way to run
+  Phase 1 in production too.
+
+## Option A — Docker Compose on your Azure VM
+
+This repo's root `docker-compose.yml` builds and runs all three pieces: Postgres, the API
+(AI Gateway), and the Next.js web app.
+
+### One-time VM setup
+
+1. SSH into the VM.
+2. Install Docker Engine + the Compose plugin (Docker isn't set up yet, per your note):
+   ```bash
+   curl -fsSL https://get.docker.com | sh
+   sudo usermod -aG docker $USER   # log out/in again after this
+   ```
+3. Open the VM's Network Security Group to allow inbound TCP on **3000** (web) and, if you want
+   to hit the API directly for debugging, **4000**. Do **not** expose 5432 (Postgres) publicly.
+4. Clone this repo onto the VM and check out this branch:
+   ```bash
+   git clone https://github.com/zferdous652-lab/Ai-Tutor.git
+   cd Ai-Tutor
+   git checkout claude/project-structure-mvp-plan-fgk1xu
+   ```
+
+### Configure and run
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+- `ANTHROPIC_API_KEY` — your Claude API key (required — the app won't start without it)
+- `NEXT_PUBLIC_API_URL` — **set this to `http://<VM_PUBLIC_IP>:4000`**, not `localhost`. This value
+  gets baked into the browser JavaScript bundle at build time, so it has to be an address your
+  laptop's browser can actually reach — `localhost` would resolve to the visitor's own machine,
+  not the VM.
+
+```bash
+docker compose up -d --build
+docker compose exec api node dist/seed.js   # one-time: creates the demo family, prints user ids
+```
+
+Then open `http://<VM_PUBLIC_IP>:3000` in your browser, paste one of the printed user ids on the
+home page, and use **Upload** (as the parent id) to add a PDF, then the printed **student** id to
+chat with the tutor and take the quiz, and **Parent Dashboard** (as the parent id) to see weak
+chapters and Xpoints usage.
+
+### Day-to-day
+
+```bash
+docker compose logs -f api web   # tail logs
+docker compose up -d --build      # rebuild + restart after pulling new commits
+docker compose down                # stop everything (data persists in the postgres-data volume)
+```
+
+If you change `NEXT_PUBLIC_API_URL` in `.env`, you must rebuild the `web` image
+(`docker compose up -d --build web`) — it won't pick up the change from a restart alone, since
+it's compiled into the bundle at build time.
+
+## Option B — Azure App Service, no Docker
 
 | Component | Azure service | Why |
 |---|---|---|
 | `apps/web` (Next.js) | App Service (Linux, Node 20) | PaaS, deploy from GitHub, managed SSL/scaling, no Docker |
 | `apps/api` (Express) | App Service (Linux, Node 20) — separate app from `web` | Same as above; keep it a separate App Service so it scales/restarts independently of the frontend |
 | Database | Azure Database for PostgreSQL — Flexible Server (Burstable B1ms is enough to start) | Managed Postgres, matches the doc's recommendation, no server to patch |
-| File storage | None yet | MVP parses the uploaded PDF to text immediately and doesn't keep the original file — nothing to store. Add Blob Storage when you need to keep source files. |
 
-You will **not** need: Redis, N8N, Azure Container Apps, or Blob Storage for Phase 1.
-
-## One-time setup
+### One-time setup
 
 1. **Resource group** — create one (e.g. `mytaman-ai-tutor-rg`) to hold everything below.
 2. **Postgres**: Azure Database for PostgreSQL Flexible Server → note the connection string →
@@ -31,7 +90,7 @@ You will **not** need: Redis, N8N, Azure Container Apps, or Blob Storage for Pha
 5. **App settings** on `mytaman-web`:
    - `NEXT_PUBLIC_API_URL` — the `mytaman-api` App Service URL (e.g. `https://mytaman-api.azurewebsites.net`)
 
-## Deploying
+### Deploying
 
 Simplest path: connect each App Service to this GitHub repo (Deployment Center → GitHub) and set:
 - `mytaman-api` → build from `apps/api`, startup command `npm run start`
@@ -43,22 +102,16 @@ before `npm run start`, using each app's own `package.json` (Prisma's `postinsta
 `DATABASE_URL` after the first deploy — either via the App Service SSH console or a one-off local
 run pointed at the production connection string).
 
-## Migrating to Docker later (Phase 2+)
-
-When you're ready to containerize (e.g. once the AI Gateway needs background workers, Redis, or
-you want Azure Container Apps' scale-to-zero), `apps/api` is the piece to containerize first — it
-has no dependency on App Service-specific behavior. `docker-compose.yml` in this repo already
-shows the local shape (Postgres + api); adding a `Dockerfile` to `apps/api` and pushing it to
-Azure Container Registry → Container Apps is a self-contained follow-up task that doesn't require
-changing `apps/web`.
-
 ## Local development (no Azure needed)
 
 ```bash
 cp .env.example .env        # fill in ANTHROPIC_API_KEY
-docker compose up -d         # starts Postgres only
+docker compose up -d postgres  # starts Postgres only
 npm install
 npm run db:migrate --workspace apps/api
 npm run db:seed --workspace apps/api
-npm run dev                  # runs api (:4000) and web (:3000) together
+npm run dev                  # runs api (:4000) and web (:3000) together, with hot reload
 ```
+
+Or run the exact same containers you'd run on the VM: `docker compose up -d --build` (no
+`postgres`-only flag) and seed with `docker compose exec api node dist/seed.js`.

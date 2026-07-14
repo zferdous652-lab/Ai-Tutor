@@ -8,7 +8,7 @@ Ai-Tutor/
 │   ├── api/            AI Gateway + backend API (Express, TypeScript, Prisma)
 │   └── web/             Student App + Parent Dashboard (Next.js App Router)
 ├── docs/                This document, MVP plan, Azure deployment guide
-├── docker-compose.yml    Local dev only: Postgres
+├── docker-compose.yml    Builds & runs postgres + api + web (local dev, or an Azure VM)
 └── .env.example
 ```
 

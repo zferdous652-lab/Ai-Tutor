@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PARENT
+  STUDENT
+}
+
+enum DocumentStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+model Family {
+  id        String     @id @default(cuid())
+  name      String
+  createdAt DateTime   @default(now())
+  users     User[]
+  documents Document[]
+}
+
+model User {
+  id            String          @id @default(cuid())
+  family        Family          @relation(fields: [familyId], references: [id])
+  familyId      String
+  name          String
+  role          Role
+  language      String          @default("en") // "en" | "ms"
+  createdAt     DateTime        @default(now())
+  chatMessages  ChatMessage[]
+  quizAttempts  QuizAttempt[]
+  xpointsLedger XpointsLedger[]
+}
+
+model Document {
+  id        String         @id @default(cuid())
+  family    Family         @relation(fields: [familyId], references: [id])
+  familyId  String
+  title     String
+  subject   String
+  standard  String // e.g. "KSSM"
+  language  String         @default("en")
+  status    DocumentStatus @default(PROCESSING)
+  rawText   String?
+  createdAt DateTime       @default(now())
+  chapters  Chapter[]
+}
+
+model Chapter {
+  id           String        @id @default(cuid())
+  document     Document      @relation(fields: [documentId], references: [id])
+  documentId   String
+  order        Int
+  title        String
+  content      String
+  summary      String?
+  chatMessages ChatMessage[]
+  quiz         Quiz?
+
+  @@unique([documentId, order])
+}
+
+model Quiz {
+  id        String        @id @default(cuid())
+  chapter   Chapter       @relation(fields: [chapterId], references: [id])
+  chapterId String        @unique
+  questions Json // [{ question, options: string[], correctIndex, topic }]
+  createdAt DateTime      @default(now())
+  attempts  QuizAttempt[]
+}
+
+model QuizAttempt {
+  id         String   @id @default(cuid())
+  quiz       Quiz     @relation(fields: [quizId], references: [id])
+  quizId     String
+  student    User     @relation(fields: [studentId], references: [id])
+  studentId  String
+  score      Float // 0..1
+  weakTopics Json // string[] of topics answered incorrectly
+  createdAt  DateTime @default(now())
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  chapter   Chapter  @relation(fields: [chapterId], references: [id])
+  chapterId String
+  student   User     @relation(fields: [studentId], references: [id])
+  studentId String
+  role      String // "student" | "tutor"
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model XpointsLedger {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  delta     Int // negative = spend, positive = grant
+  reason    String
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,22 @@
+{
+  "appName": "Tutor AI MYTAMAN",
+  "nav.upload": "Muat Naik",
+  "nav.parent": "Papan Pemuka Ibu Bapa",
+  "nav.student": "Pelajar",
+  "upload.title": "Muat naik PDF buku teks",
+  "upload.titleField": "Tajuk",
+  "upload.subjectField": "Subjek",
+  "upload.standardField": "Standard",
+  "upload.submit": "Muat Naik & Proses",
+  "upload.processing": "Sedang memproses...",
+  "documents.chapters": "bab",
+  "documents.generateSummary": "Jana ringkasan",
+  "documents.generateQuiz": "Jana kuiz",
+  "student.chat.placeholder": "Tanya tutor anda satu soalan...",
+  "student.chat.send": "Hantar",
+  "student.quiz.submit": "Hantar jawapan",
+  "student.quiz.score": "Markah",
+  "parent.weakChapters": "Bab lemah",
+  "parent.xpoints": "Baki Xpoints",
+  "parent.noWeakChapters": "Tiada bab lemah lagi — kemajuan yang baik!"
+}

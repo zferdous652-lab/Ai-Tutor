@@ -6,9 +6,7 @@ import { requireRole, requireUser } from "../middleware/auth";
 import { generateChapterQuiz, generateChapterSummary } from "../services/llm";
 import { extractPdfMarkdown, splitIntoChapters } from "../services/pdf";
 
-// Real course material (e.g. a 500-page textbook) can be large; processing is still
-// synchronous for now (see docs/MVP_PLAN.md — async upload is a tracked follow-up), so this
-// mainly guards against pathological uploads rather than being a considered ceiling.
+// Real course material (e.g. a 500-page textbook) can be large.
 const upload = multer({ limits: { fileSize: 100 * 1024 * 1024 } });
 export const adminRouter = Router();
 
@@ -48,19 +46,35 @@ adminRouter.post("/tutor-packs", upload.single("file"), async (req, res) => {
     data: { title, subject, standard, language, tier: tier as (typeof VALID_TIERS)[number] },
   });
 
+  // Respond immediately rather than holding the request open for however long extraction
+  // takes on a large PDF (risks a client/proxy timeout, and leaves the admin staring at a
+  // spinner). The pack is already visible in the admin list with status PROCESSING; the
+  // frontend polls until it flips to DRAFT or FAILED. This does NOT run parsing on a separate
+  // thread/process — it's still CPU work on the same Node event loop, just no longer blocking
+  // the HTTP response for it. Fine for admin-only, low-concurrency uploads; if concurrent
+  // large uploads ever cause noticeable latency for other requests, move this to a
+  // worker_thread or a real background job.
+  res.status(202).json({ tutorPackId: pack.id, status: pack.status });
+
+  processUpload(pack.id, req.file.buffer).catch((err) => {
+    console.error(`[admin] failed to process TutorPack ${pack.id}:`, err);
+  });
+});
+
+async function processUpload(tutorPackId: string, fileBuffer: Buffer): Promise<void> {
   try {
-    const rawText = await extractPdfMarkdown(req.file.buffer);
+    const rawText = await extractPdfMarkdown(fileBuffer);
     const chapters = splitIntoChapters(rawText);
 
     await prisma.$transaction([
       prisma.tutorPack.update({
-        where: { id: pack.id },
+        where: { id: tutorPackId },
         data: { rawText, status: "DRAFT" },
       }),
       ...chapters.map((chapter) =>
         prisma.chapter.create({
           data: {
-            tutorPackId: pack.id,
+            tutorPackId,
             order: chapter.order,
             title: chapter.title,
             content: chapter.content,
@@ -68,13 +82,11 @@ adminRouter.post("/tutor-packs", upload.single("file"), async (req, res) => {
         })
       ),
     ]);
-
-    res.status(201).json({ tutorPackId: pack.id, chapterCount: chapters.length });
   } catch (err) {
-    await prisma.tutorPack.update({ where: { id: pack.id }, data: { status: "FAILED" } });
+    await prisma.tutorPack.update({ where: { id: tutorPackId }, data: { status: "FAILED" } });
     throw err;
   }
-});
+}
 
 adminRouter.get("/tutor-packs", async (_req, res) => {
   const packs = await prisma.tutorPack.findMany({

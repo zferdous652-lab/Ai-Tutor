@@ -95,11 +95,14 @@ export const api = {
   // Admin
   adminListPacks: (userId: string) => request<TutorPackAdminView[]>("/admin/tutor-packs", userId),
 
+  // Upload is processed in the background — this returns as soon as the pack is created
+  // (status PROCESSING), not once chapters exist. Poll adminListPacks for status/chapters.
   adminUploadPack: (userId: string, form: FormData) =>
-    request<{ tutorPackId: string; chapterCount: number }>("/admin/tutor-packs", userId, {
-      method: "POST",
-      body: form,
-    }),
+    request<{ tutorPackId: string; status: TutorPackAdminView["status"] }>(
+      "/admin/tutor-packs",
+      userId,
+      { method: "POST", body: form }
+    ),
 
   adminPublishPack: (userId: string, tutorPackId: string) =>
     request<TutorPackAdminView>(`/admin/tutor-packs/${tutorPackId}/publish`, userId, {

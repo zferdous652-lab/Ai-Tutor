@@ -20,6 +20,18 @@ export default function AdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, me]);
 
+  // Upload processing happens in the background (see docs/ARCHITECTURE.md); poll while any
+  // pack is still PROCESSING so status/chapters appear without a manual refresh.
+  useEffect(() => {
+    if (me?.role !== "ADMIN") return;
+    if (!packs.some((p) => p.status === "PROCESSING")) return;
+    const interval = setInterval(() => {
+      refresh().catch((err) => setError(String(err)));
+    }, 3000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me, packs]);
+
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!userId) return;

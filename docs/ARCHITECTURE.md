@@ -55,11 +55,12 @@ content... only the personalized conversation uses live AI, for premium packs."*
 
 ```
 Admin (web)   --upload PDF-->        api /admin/tutor-packs
-                                          │  pdf2md extracts Markdown, headings (H1, falling
-                                          │  back to H2, falling back to equal chunks) split
-                                          │  it into chapters
+                                          │  responds immediately (202, status PROCESSING);
+                                          │  pdf2md extracts Markdown + splits into chapters
+                                          │  (H1, falling back to H2, falling back to equal
+                                          │  chunks) in the background — admin UI polls
                                           ▼
-                                     TutorPack (draft) + Chapter rows saved
+                                     TutorPack (status: DRAFT or FAILED) + Chapter rows saved
                                           │
               api PATCH/DELETE /admin/chapters/:id  --> human review: rename/drop a bad split
                                           │

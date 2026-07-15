@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { GenerateRequest, LlmProvider, ProviderError } from "../types";
+import { DescribeImagesRequest, GenerateRequest, LlmProvider, ProviderError } from "../types";
 
 const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
 
@@ -20,6 +20,37 @@ export class AnthropicProvider implements LlmProvider {
         max_tokens: maxTokens,
         system,
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      });
+      const block = message.content.find((c) => c.type === "text");
+      if (!block || block.type !== "text") {
+        throw new Error("response contained no text content");
+      }
+      return block.text;
+    } catch (err) {
+      throw new ProviderError(this.name, err);
+    }
+  }
+
+  async describeImages({ system, prompt, images, maxTokens }: DescribeImagesRequest): Promise<string> {
+    try {
+      const message = await this.client.messages.create({
+        model: this.model,
+        max_tokens: maxTokens,
+        system,
+        messages: [
+          {
+            role: "user",
+            content: [
+              ...images.map(
+                (img): Anthropic.ImageBlockParam => ({
+                  type: "image",
+                  source: { type: "base64", media_type: "image/png", data: img.base64 },
+                })
+              ),
+              { type: "text", text: prompt },
+            ],
+          },
+        ],
       });
       const block = message.content.find((c) => c.type === "text");
       if (!block || block.type !== "text") {

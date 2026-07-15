@@ -51,6 +51,33 @@ Each pack has a `tier`:
 This mirrors the concept doc directly: *"80–90% of the experience comes from pre-generated
 content... only the personalized conversation uses live AI, for premium packs."*
 
+## Content pipeline: extraction, async processing, visual captioning
+
+`apps/api/src/services/pdf.ts` extracts a PDF as Markdown via `@opendocsg/pdf2md` (pure Node,
+detects headings from font size — no dependency on a textbook using specific words like
+"Chapter"/"Bab") and splits it into chapters on heading structure (H1, falling back to H2,
+falling back to equal-sized chunks only if there's no usable heading structure at all).
+
+Upload processing (`POST /admin/tutor-packs`) runs in the background: the request returns as
+soon as the `TutorPack` row exists (`202`, status `PROCESSING`), and `apps/web`'s admin page
+polls every 3s until the pack flips to `DRAFT` or `FAILED`. This avoids a client/proxy timeout
+on a large PDF, but is **not** true parallelism — it's a fire-and-forget async function on the
+same Node process, so a huge PDF still occupies the event loop while parsing. Fine for
+admin-only, low-concurrency uploads (see `docs/MVP_PLAN.md`).
+
+Optionally (an `analyzeVisuals` checkbox on upload), `apps/api/src/services/visualNotes.ts`
+renders every page of the PDF to an image (`unpdf` + `@napi-rs/canvas`, a Rust/Skia canvas
+implementation with prebuilt musl binaries — works in the Alpine Docker image without compiling
+native code) and batches them into vision-model calls (`LlmProvider.describeImages`, implemented
+on both the Anthropic and Gemini providers) asking only for diagrams/maps/photos/charts, skipping
+pure-text pages. Results are stored as `TutorPack.visualNotes` (`[{page, description}]`) and
+appended as shared context to every chapter's summary/quiz/chat prompt in that pack — not
+attributed to the specific chapter the figure appears in (see `docs/MVP_PLAN.md` for why that's
+an accepted simplification for now). This is a one-time, admin-triggered cost amortized across
+every enrolled student, batched (15 pages/call) and capped (200 pages) so it can't run away on a
+very large document. A captioning failure is caught separately and doesn't fail the pack — the
+already-extracted chapters remain usable without visual notes.
+
 ## Request flow (golden path)
 
 ```
@@ -88,12 +115,13 @@ via a **model router**, provider selection:
 
 ```
 services/llm/
-├── types.ts               LlmProvider interface, ProviderError
+├── types.ts               LlmProvider interface (generateText + describeImages), ProviderError
 ├── providers/
 │   ├── anthropic.ts        Claude, via @anthropic-ai/sdk
 │   └── gemini.ts            Gemini, via @google/generative-ai
 ├── router.ts                ModelRouter: tries providers in order, falls back on ProviderError
-└── index.ts                 Public API (generateChapterSummary, generateChapterQuiz, tutorReply)
+└── index.ts                 Public API (generateChapterSummary, generateChapterQuiz, tutorReply,
+                              describePageDiagrams, formatVisualContext)
 ```
 
 `ANTHROPIC_API_KEY` and `GEMINI_API_KEY` are both optional, but at least one must be set (the API
@@ -143,4 +171,6 @@ third language is added.
 See the simplification table in `docs/MVP_PLAN.md` — Redis, N8N, pgvector/embeddings, Blob
 Storage, Stripe billing, and real auth are all out of scope for Phase 1 by design, not by
 oversight. Also not yet built: flashcards/notes/mind-maps (Basic tier content types beyond
-summary/quiz), per-student AI cost tracking, and Final Assessments (Premium).
+summary/quiz), per-student AI cost tracking, Final Assessments (Premium), a true background job
+queue for uploads (currently fire-and-forget on the same process), and precise per-chapter
+attribution of visual notes (currently whole-pack).

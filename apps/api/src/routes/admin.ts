@@ -3,8 +3,9 @@ import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../lib/prisma";
 import { requireRole, requireUser } from "../middleware/auth";
-import { generateChapterQuiz, generateChapterSummary } from "../services/llm";
+import { formatVisualContext, generateChapterQuiz, generateChapterSummary, VisualNote } from "../services/llm";
 import { extractPdfMarkdown, splitIntoChapters } from "../services/pdf";
+import { generateVisualNotes } from "../services/visualNotes";
 
 // Real course material (e.g. a 500-page textbook) can be large.
 const upload = multer({ limits: { fileSize: 100 * 1024 * 1024 } });
@@ -26,12 +27,14 @@ adminRouter.post("/tutor-packs", upload.single("file"), async (req, res) => {
     standard = "KSSM",
     language = "en",
     tier = "BASIC",
+    analyzeVisuals,
   } = req.body as {
     title?: string;
     subject?: string;
     standard?: string;
     language?: string;
     tier?: string;
+    analyzeVisuals?: string;
   };
   if (!title) {
     res.status(400).json({ error: "Missing title" });
@@ -56,12 +59,17 @@ adminRouter.post("/tutor-packs", upload.single("file"), async (req, res) => {
   // worker_thread or a real background job.
   res.status(202).json({ tutorPackId: pack.id, status: pack.status });
 
-  processUpload(pack.id, req.file.buffer).catch((err) => {
+  processUpload(pack.id, req.file.buffer, language, analyzeVisuals === "true").catch((err) => {
     console.error(`[admin] failed to process TutorPack ${pack.id}:`, err);
   });
 });
 
-async function processUpload(tutorPackId: string, fileBuffer: Buffer): Promise<void> {
+async function processUpload(
+  tutorPackId: string,
+  fileBuffer: Buffer,
+  language: string,
+  analyzeVisuals: boolean
+): Promise<void> {
   try {
     const rawText = await extractPdfMarkdown(fileBuffer);
     const chapters = splitIntoChapters(rawText);
@@ -85,6 +93,20 @@ async function processUpload(tutorPackId: string, fileBuffer: Buffer): Promise<v
   } catch (err) {
     await prisma.tutorPack.update({ where: { id: tutorPackId }, data: { status: "FAILED" } });
     throw err;
+  }
+
+  // Best-effort: visual analysis failing shouldn't undo a successful text extraction (the
+  // pack is already usable without it). Opt-in since it's a real additional vision-LLM cost.
+  if (analyzeVisuals) {
+    try {
+      const visualNotes = await generateVisualNotes(fileBuffer, language);
+      await prisma.tutorPack.update({
+        where: { id: tutorPackId },
+        data: { visualNotes: visualNotes as unknown as Prisma.InputJsonValue },
+      });
+    } catch (err) {
+      console.error(`[admin] visual analysis failed for TutorPack ${tutorPackId}:`, err);
+    }
   }
 }
 
@@ -166,7 +188,12 @@ adminRouter.post("/chapters/:chapterId/summary", async (req, res) => {
     res.status(404).json({ error: "Chapter not found" });
     return;
   }
-  const summary = await generateChapterSummary(chapter.content, chapter.tutorPack.language);
+  const visualContext = formatVisualContext(chapter.tutorPack.visualNotes as VisualNote[] | null);
+  const summary = await generateChapterSummary(
+    chapter.content,
+    chapter.tutorPack.language,
+    visualContext
+  );
   const updated = await prisma.chapter.update({ where: { id: chapter.id }, data: { summary } });
   res.json({ chapterId: updated.id, summary: updated.summary });
 });
@@ -180,7 +207,12 @@ adminRouter.post("/chapters/:chapterId/quiz", async (req, res) => {
     res.status(404).json({ error: "Chapter not found" });
     return;
   }
-  const questions = await generateChapterQuiz(chapter.content, chapter.tutorPack.language);
+  const visualContext = formatVisualContext(chapter.tutorPack.visualNotes as VisualNote[] | null);
+  const questions = await generateChapterQuiz(
+    chapter.content,
+    chapter.tutorPack.language,
+    visualContext
+  );
   const questionsJson = questions as unknown as Prisma.InputJsonValue;
   const quiz = await prisma.quiz.upsert({
     where: { chapterId: chapter.id },

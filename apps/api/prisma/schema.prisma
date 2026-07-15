@@ -60,6 +60,10 @@ model TutorPack {
   tier        PackTier        @default(BASIC)
   status      TutorPackStatus @default(PROCESSING)
   rawText     String?
+  // [{ page: number, description: string }] — diagrams/maps/photos found by rendering PDF
+  // pages to images and captioning them with a vision model. Not attributed to a specific
+  // chapter (see docs/MVP_PLAN.md); null if the admin didn't request visual analysis.
+  visualNotes Json?
   publishedAt DateTime?
   createdAt   DateTime        @default(now())
   chapters    Chapter[]

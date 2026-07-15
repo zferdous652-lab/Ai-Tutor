@@ -140,6 +140,12 @@ export default function AdminPage() {
             <label htmlFor="file">Course material (PDF)</label>
             <input id="file" name="file" type="file" accept="application/pdf" required />
           </div>
+          <div className="field">
+            <label>
+              <input type="checkbox" name="analyzeVisuals" value="true" /> Also analyze
+              diagrams, maps, and photos (slower, additional AI cost)
+            </label>
+          </div>
           <button type="submit" disabled={busy}>
             {busy ? "Processing..." : "Upload & Process"}
           </button>
@@ -156,6 +162,7 @@ export default function AdminPage() {
           </h3>
           <p>
             {pack.subject} · {pack.standard} · {pack.tier} · {pack.chapters.length} chapters
+            {pack.visualNotes && ` · ${pack.visualNotes.length} figures captioned`}
           </p>
           <ul>
             {pack.chapters.map((chapter) => (

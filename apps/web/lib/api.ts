@@ -59,6 +59,7 @@ export interface TutorPackAdminView {
   tier: PackTier;
   status: "PROCESSING" | "DRAFT" | "FAILED";
   publishedAt: string | null;
+  visualNotes: { page: number; description: string }[] | null;
   chapters: ChapterSummary[];
 }
 

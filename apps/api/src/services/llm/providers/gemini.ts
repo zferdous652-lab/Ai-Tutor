@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { GenerateRequest, LlmProvider, ProviderError } from "../types";
+import { DescribeImagesRequest, GenerateRequest, LlmProvider, ProviderError } from "../types";
 
 const DEFAULT_MODEL = "gemini-2.0-flash";
 
@@ -34,6 +34,41 @@ export class GeminiProvider implements LlmProvider {
         generationConfig: { maxOutputTokens: maxTokens },
       });
       const result = await chat.sendMessage(lastMessage.content);
+      const text = result.response.text();
+      if (!text) {
+        throw new Error("response contained no text content");
+      }
+      return text;
+    } catch (err) {
+      throw new ProviderError(this.name, err);
+    }
+  }
+
+  async describeImages({
+    system,
+    prompt,
+    images,
+    maxTokens,
+  }: DescribeImagesRequest): Promise<string> {
+    try {
+      const model = this.client.getGenerativeModel({
+        model: this.model,
+        systemInstruction: system,
+      });
+      const result = await model.generateContent({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              ...images.map((img) => ({
+                inlineData: { mimeType: "image/png", data: img.base64 },
+              })),
+              { text: prompt },
+            ],
+          },
+        ],
+        generationConfig: { maxOutputTokens: maxTokens },
+      });
       const text = result.response.text();
       if (!text) {
         throw new Error("response contained no text content");

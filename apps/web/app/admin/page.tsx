@@ -35,12 +35,15 @@ export default function AdminPage() {
   async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!userId) return;
+    // Capture the form element now — e.currentTarget is nulled out by the DOM once this
+    // event handler's dispatch phase ends, so using it after an `await` throws.
+    const formEl = e.currentTarget;
     setBusy(true);
     setError(null);
     try {
-      const form = new FormData(e.currentTarget);
+      const form = new FormData(formEl);
       await api.adminUploadPack(userId, form);
-      e.currentTarget.reset();
+      formEl.reset();
       await refresh();
     } catch (err) {
       setError(String(err));
@@ -147,8 +150,15 @@ export default function AdminPage() {
             </label>
           </div>
           <button type="submit" disabled={busy}>
-            {busy ? "Processing..." : "Upload & Process"}
+            {busy ? "Uploading..." : "Upload & Process"}
           </button>
+          {busy && (
+            <p style={{ marginTop: 8, fontSize: 14, color: "#666" }}>
+              Large PDFs can take a few minutes to upload and process — please don&apos;t close
+              or refresh this page. Once the upload completes it&apos;ll appear below with status
+              PROCESSING, then flip to DRAFT automatically when parsing finishes.
+            </p>
+          )}
         </form>
       </div>
 

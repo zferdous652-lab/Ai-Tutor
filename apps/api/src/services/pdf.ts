@@ -1,4 +1,11 @@
-import pdf2md from "@opendocsg/pdf2md";
+import { execFile } from "child_process";
+import { randomUUID } from "crypto";
+import { promises as fs } from "fs";
+import os from "os";
+import path from "path";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 export interface ParsedChapter {
   order: number;
@@ -64,11 +71,11 @@ function chunkEqually(markdown: string): ParsedChapter[] {
 
 /**
  * Splits a Markdown document (produced by extractPdfMarkdown) into chapters using real
- * heading structure rather than guessing at literal words like "Chapter"/"Bab" — pdf2md
- * detects headings from font-size/formatting, so this works regardless of a textbook's
- * heading vocabulary (BAB, TOPIK, UNIT, numbered, ...). Prefers H1 boundaries; falls back to
- * H2 if there's only one (or zero) H1; falls back to equal-sized chunks if there's no usable
- * heading structure at all (e.g. a scanned/flattened PDF with no font-size variation).
+ * heading structure rather than guessing at literal words like "Chapter"/"Bab" — headings are
+ * detected from font size, so this works regardless of a textbook's heading vocabulary (BAB,
+ * TOPIK, UNIT, numbered, ...). Prefers H1 boundaries; falls back to H2 if there's only one (or
+ * zero) H1; falls back to equal-sized chunks if there's no usable heading structure at all
+ * (e.g. a scanned/flattened PDF with no font-size variation).
  */
 export function splitIntoChapters(markdown: string): ParsedChapter[] {
   const lines = markdown.split(/\r?\n/);
@@ -85,7 +92,28 @@ export function splitIntoChapters(markdown: string): ParsedChapter[] {
   return chunkEqually(markdown);
 }
 
+const SCRIPT_PATH = path.join(__dirname, "..", "..", "scripts", "pdf_to_markdown.py");
+// Kept under the outer 5-minute processUpload guard (routes/admin.ts) so this subprocess-level
+// kill fires first, with a clearer error, rather than racing the JS-level timeout.
+const SUBPROCESS_TIMEOUT_MS = 4 * 60 * 1000;
+
+/**
+ * Shells out to a Python script (pdfplumber-based) rather than using a JS/pdf.js-based
+ * library — swapped in after @opendocsg/pdf2md (also pdf.js-based) hung indefinitely on a
+ * real course PDF in production, confirmed via near-zero CPU usage (i.e. genuinely stuck
+ * awaiting something, not just slow). Unlike an abandoned JS Promise, execFile's `timeout`
+ * actually kills the subprocess if it hangs.
+ */
 export async function extractPdfMarkdown(buffer: Buffer): Promise<string> {
-  const markdown = await pdf2md(buffer);
-  return markdown;
+  const tmpFile = path.join(os.tmpdir(), `upload-${randomUUID()}.pdf`);
+  await fs.writeFile(tmpFile, buffer);
+  try {
+    const { stdout } = await execFileAsync("python3", [SCRIPT_PATH, tmpFile], {
+      timeout: SUBPROCESS_TIMEOUT_MS,
+      maxBuffer: 50 * 1024 * 1024, // a large textbook produces a lot of markdown
+    });
+    return stdout;
+  } finally {
+    await fs.unlink(tmpFile).catch(() => {});
+  }
 }

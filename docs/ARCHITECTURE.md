@@ -53,17 +53,34 @@ content... only the personalized conversation uses live AI, for premium packs."*
 
 ## Content pipeline: extraction, async processing, visual captioning
 
-`apps/api/src/services/pdf.ts` extracts a PDF as Markdown via `@opendocsg/pdf2md` (pure Node,
-detects headings from font size — no dependency on a textbook using specific words like
-"Chapter"/"Bab") and splits it into chapters on heading structure (H1, falling back to H2,
-falling back to equal-sized chunks only if there's no usable heading structure at all).
+`apps/api/src/services/pdf.ts` extracts a PDF as Markdown by shelling out to
+`apps/api/scripts/pdf_to_markdown.py` (pdfplumber), which detects headings from font size — no
+dependency on a textbook using specific words like "Chapter"/"Bab" — and returns Markdown that
+`splitIntoChapters` splits on heading structure (H1, falling back to H2, falling back to
+equal-sized chunks only if there's no usable heading structure at all).
+
+This used to be a pure-Node library (`@opendocsg/pdf2md`, also pdf.js-based) but was replaced
+after it hung indefinitely on a real course PDF in production — confirmed via `docker stats`
+showing the API container at ~0% CPU, i.e. genuinely stuck awaiting something, not just slow.
+The Python subprocess is invoked with `execFile`'s `timeout` option, which actually **kills**
+the process on timeout (4 min) — unlike an abandoned JS Promise, which can't be cancelled. This
+is why the API's Docker base image is `node:20-bookworm-slim` (Debian/glibc) rather than Alpine:
+the Python PDF ecosystem's prebuilt wheels are manylinux (glibc), and gambling on musl
+compatibility wasn't worth it after everything else that went wrong here. `@napi-rs/canvas`
+(used for visual captioning below) resolves its own glibc build automatically on this base.
 
 Upload processing (`POST /admin/tutor-packs`) runs in the background: the request returns as
 soon as the `TutorPack` row exists (`202`, status `PROCESSING`), and `apps/web`'s admin page
 polls every 3s until the pack flips to `DRAFT` or `FAILED`. This avoids a client/proxy timeout
-on a large PDF, but is **not** true parallelism — it's a fire-and-forget async function on the
-same Node process, so a huge PDF still occupies the event loop while parsing. Fine for
-admin-only, low-concurrency uploads (see `docs/MVP_PLAN.md`).
+on a large PDF, but is **not** true parallelism for the rest of the request handling — it's a
+fire-and-forget async function on the same Node process (the actual extraction work, however,
+now runs in a separate OS process via the Python subprocess above, so it no longer blocks the
+API's event loop the way the old in-process JS library did). Two further robustness gaps found
+via real testing on the Azure VM, both fixed: an outer 5-minute timeout around the whole
+extraction step (`routes/admin.ts`, belt-and-suspenders alongside the subprocess-level one
+above), and a startup reconciliation (`index.ts`) that marks any pack still `PROCESSING` as
+`FAILED` on boot, since a container restart mid-upload orphans the in-memory work with no way
+to resume it. Fine for admin-only, low-concurrency uploads (see `docs/MVP_PLAN.md`).
 
 Optionally (an `analyzeVisuals` checkbox on upload), `apps/api/src/services/visualNotes.ts`
 renders every page of the PDF to an image (`unpdf` + `@napi-rs/canvas`, a Rust/Skia canvas
@@ -83,7 +100,8 @@ already-extracted chapters remain usable without visual notes.
 ```
 Admin (web)   --upload PDF-->        api /admin/tutor-packs
                                           │  responds immediately (202, status PROCESSING);
-                                          │  pdf2md extracts Markdown + splits into chapters
+                                          │  pdfplumber (Python subprocess) extracts Markdown,
+                                          │  splitIntoChapters splits into chapters
                                           │  (H1, falling back to H2, falling back to equal
                                           │  chunks) in the background — admin UI polls
                                           ▼

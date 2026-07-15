@@ -3,9 +3,13 @@ import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../lib/prisma";
 import { requireRole, requireUser } from "../middleware/auth";
+import { withTimeout } from "../lib/timeout";
 import { formatVisualContext, generateChapterQuiz, generateChapterSummary, VisualNote } from "../services/llm";
 import { extractPdfMarkdown, splitIntoChapters } from "../services/pdf";
 import { generateVisualNotes } from "../services/visualNotes";
+
+const EXTRACTION_TIMEOUT_MS = 5 * 60 * 1000;
+const VISUAL_ANALYSIS_TIMEOUT_MS = 15 * 60 * 1000;
 
 // Real course material (e.g. a 500-page textbook) can be large.
 const upload = multer({ limits: { fileSize: 100 * 1024 * 1024 } });
@@ -71,7 +75,11 @@ async function processUpload(
   analyzeVisuals: boolean
 ): Promise<void> {
   try {
-    const rawText = await extractPdfMarkdown(fileBuffer);
+    const rawText = await withTimeout(
+      extractPdfMarkdown(fileBuffer),
+      EXTRACTION_TIMEOUT_MS,
+      "PDF extraction timed out — the file may be malformed or too complex to parse"
+    );
     const chapters = splitIntoChapters(rawText);
 
     await prisma.$transaction([
@@ -99,7 +107,11 @@ async function processUpload(
   // pack is already usable without it). Opt-in since it's a real additional vision-LLM cost.
   if (analyzeVisuals) {
     try {
-      const visualNotes = await generateVisualNotes(fileBuffer, language);
+      const visualNotes = await withTimeout(
+        generateVisualNotes(fileBuffer, language),
+        VISUAL_ANALYSIS_TIMEOUT_MS,
+        "Visual analysis timed out"
+      );
       await prisma.tutorPack.update({
         where: { id: tutorPackId },
         data: { visualNotes: visualNotes as unknown as Prisma.InputJsonValue },

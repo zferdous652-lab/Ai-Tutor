@@ -110,6 +110,9 @@ export const api = {
       method: "POST",
     }),
 
+  adminDeletePack: (userId: string, tutorPackId: string) =>
+    request<void>(`/admin/tutor-packs/${tutorPackId}`, userId, { method: "DELETE" }),
+
   adminRenameChapter: (userId: string, chapterId: string, title: string) =>
     request<ChapterSummary>(`/admin/chapters/${chapterId}`, userId, {
       method: "PATCH",

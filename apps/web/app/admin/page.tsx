@@ -81,6 +81,21 @@ export default function AdminPage() {
     }
   }
 
+  async function handleDeletePack(tutorPackId: string) {
+    if (!userId) return;
+    if (!confirm("Delete this Tutor Pack and all its chapters? This can't be undone.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.adminDeletePack(userId, tutorPackId);
+      await refresh();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleRename(chapterId: string, title: string) {
     if (!userId || !title.trim()) return;
     setBusy(true);
@@ -168,7 +183,14 @@ export default function AdminPage() {
         <div key={pack.id} className="card">
           <h3>
             {pack.title} — {pack.status}
-            {pack.publishedAt ? " · Published" : " · Draft"}
+            {pack.publishedAt ? " · Published" : " · Draft"}{" "}
+            <button
+              disabled={busy}
+              onClick={() => handleDeletePack(pack.id)}
+              style={{ background: "crimson", fontSize: 12, padding: "4px 8px" }}
+            >
+              Delete pack
+            </button>
           </h3>
           <p>
             {pack.subject} · {pack.standard} · {pack.tier} · {pack.chapters.length} chapters

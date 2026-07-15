@@ -162,6 +162,25 @@ adminRouter.delete("/chapters/:chapterId", async (req, res) => {
   res.status(204).send();
 });
 
+// Cleanup: remove a pack that's stuck, failed, or was created by mistake. Cascades through
+// everything that references it, since none of those foreign keys cascade at the DB level.
+adminRouter.delete("/tutor-packs/:packId", async (req, res) => {
+  const pack = await prisma.tutorPack.findUnique({ where: { id: req.params.packId } });
+  if (!pack) {
+    res.status(404).json({ error: "Tutor pack not found" });
+    return;
+  }
+  await prisma.$transaction([
+    prisma.chatMessage.deleteMany({ where: { chapter: { tutorPackId: pack.id } } }),
+    prisma.quizAttempt.deleteMany({ where: { quiz: { chapter: { tutorPackId: pack.id } } } }),
+    prisma.quiz.deleteMany({ where: { chapter: { tutorPackId: pack.id } } }),
+    prisma.chapter.deleteMany({ where: { tutorPackId: pack.id } }),
+    prisma.enrollment.deleteMany({ where: { tutorPackId: pack.id } }),
+    prisma.tutorPack.delete({ where: { id: pack.id } }),
+  ]);
+  res.status(204).send();
+});
+
 // Publish gate: nothing is visible to a parent/student until this is called.
 adminRouter.post("/tutor-packs/:packId/publish", async (req, res) => {
   const pack = await prisma.tutorPack.findUnique({ where: { id: req.params.packId } });

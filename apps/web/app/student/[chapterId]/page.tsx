@@ -12,7 +12,7 @@ interface ChatEntry {
 }
 
 export default function StudentChapterPage({ params }: { params: { chapterId: string } }) {
-  const { userId } = useSession();
+  const { userId, me, loading: sessionLoading } = useSession();
   const { t } = useI18n();
   const [chapter, setChapter] = useState<ChapterDetail | null>(null);
   const [messages, setMessages] = useState<ChatEntry[]>([]);
@@ -23,16 +23,20 @@ export default function StudentChapterPage({ params }: { params: { chapterId: st
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || me?.role !== "STUDENT") return;
     api
       .getChapter(userId, params.chapterId)
-      .then(setChapter)
+      .then((c) => {
+        setChapter(c);
+        if (c.tutorPack.tier !== "BASIC") {
+          api
+            .getChatHistory(userId, params.chapterId)
+            .then(setMessages)
+            .catch(() => {});
+        }
+      })
       .catch((err) => setError(String(err)));
-    api
-      .getChatHistory(userId, params.chapterId)
-      .then(setMessages)
-      .catch(() => {});
-  }, [userId, params.chapterId]);
+  }, [userId, me, params.chapterId]);
 
   async function sendMessage() {
     if (!userId || !input.trim()) return;
@@ -67,6 +71,8 @@ export default function StudentChapterPage({ params }: { params: { chapterId: st
   }
 
   if (!userId) return <p>Sign in on the home page first.</p>;
+  if (sessionLoading) return <p>Loading...</p>;
+  if (me?.role !== "STUDENT") return <p>This page is for students only.</p>;
   if (error) return <p style={{ color: "crimson" }}>{error}</p>;
   if (!chapter) return <p>Loading...</p>;
 
@@ -77,26 +83,36 @@ export default function StudentChapterPage({ params }: { params: { chapterId: st
         {chapter.summary ? <p>{chapter.summary}</p> : <p>No summary generated yet.</p>}
       </div>
 
-      <div className="card">
-        <h3>Ask the AI tutor</h3>
-        {messages.map((m) => (
-          <div key={m.id} className={`chat-message ${m.role}`}>
-            {m.content}
-          </div>
-        ))}
-        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          <input
-            style={{ flex: 1 }}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={t("student.chat.placeholder")}
-            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-          />
-          <button onClick={sendMessage} disabled={busy || !input.trim()}>
-            {t("student.chat.send")}
-          </button>
+      {chapter.tutorPack.tier === "BASIC" ? (
+        <div className="card">
+          <h3>Ask the AI tutor</h3>
+          <p>
+            Live chat with the AI tutor is a Premium feature and isn&apos;t included in this
+            Tutor Pack.
+          </p>
         </div>
-      </div>
+      ) : (
+        <div className="card">
+          <h3>Ask the AI tutor</h3>
+          {messages.map((m) => (
+            <div key={m.id} className={`chat-message ${m.role}`}>
+              {m.content}
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <input
+              style={{ flex: 1 }}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={t("student.chat.placeholder")}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            />
+            <button onClick={sendMessage} disabled={busy || !input.trim()}>
+              {t("student.chat.send")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {chapter.quiz && (
         <div className="card">

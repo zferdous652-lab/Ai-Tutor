@@ -2,7 +2,11 @@ import { prisma } from "./lib/prisma";
 
 async function main() {
   const family = await prisma.family.create({ data: { name: "Demo Family" } });
+  const staffFamily = await prisma.family.create({ data: { name: "MYTAMAN Staff" } });
 
+  const admin = await prisma.user.create({
+    data: { familyId: staffFamily.id, name: "Demo Admin", role: "ADMIN", language: "en" },
+  });
   const parent = await prisma.user.create({
     data: { familyId: family.id, name: "Demo Parent", role: "PARENT", language: "en" },
   });
@@ -19,6 +23,7 @@ async function main() {
 
   console.log("Seeded demo family:");
   console.log(`  Family: ${family.id}`);
+  console.log(`  Admin user id (use as x-user-id): ${admin.id}`);
   console.log(`  Parent user id (use as x-user-id): ${parent.id}`);
   console.log(`  Student user id (use as x-user-id): ${student.id}`);
 }

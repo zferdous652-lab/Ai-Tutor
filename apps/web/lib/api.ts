@@ -6,11 +6,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(
-  path: string,
-  userId: string,
-  init?: RequestInit
-): Promise<T> {
+async function request<T>(path: string, userId: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
@@ -26,28 +22,14 @@ async function request<T>(
   return res.json();
 }
 
-export interface ChapterSummary {
-  id: string;
-  order: number;
-  title: string;
-  summary: string | null;
-}
+export type Role = "ADMIN" | "PARENT" | "STUDENT";
+export type PackTier = "BASIC" | "PREMIUM" | "XPOINTS";
 
-export interface DocumentDto {
+export interface Me {
   id: string;
-  title: string;
-  subject: string;
-  standard: string;
-  status: "PROCESSING" | "READY" | "FAILED";
-  chapters: ChapterSummary[];
-}
-
-export interface ChapterDetail {
-  id: string;
-  title: string;
-  content: string;
-  summary: string | null;
-  quiz: { id: string; questions: QuizQuestion[] } | null;
+  familyId: string;
+  role: Role;
+  language: string;
 }
 
 export interface QuizQuestion {
@@ -57,27 +39,121 @@ export interface QuizQuestion {
   topic: string;
 }
 
+export interface ChapterSummary {
+  id: string;
+  order: number;
+  title: string;
+  summary: string | null;
+  quiz: { id: string } | null;
+}
+
+export interface TutorPackAdminView {
+  id: string;
+  title: string;
+  subject: string;
+  standard: string;
+  language: string;
+  tier: PackTier;
+  status: "PROCESSING" | "DRAFT" | "FAILED";
+  publishedAt: string | null;
+  chapters: ChapterSummary[];
+}
+
+export interface TutorPackBrowseView {
+  id: string;
+  title: string;
+  subject: string;
+  standard: string;
+  language: string;
+  tier: PackTier;
+  publishedAt: string;
+}
+
+export interface ChapterDetail {
+  id: string;
+  title: string;
+  content: string;
+  summary: string | null;
+  quiz: { id: string; questions: QuizQuestion[] } | null;
+  tutorPack: { tier: PackTier; title: string };
+}
+
+export interface Enrollment {
+  id: string;
+  studentId: string;
+  tutorPackId: string;
+  tutorPack: { id: string; title: string; subject: string; standard: string; tier: PackTier };
+  student: { id: string; name: string };
+}
+
 export const api = {
-  listDocuments: (userId: string) => request<DocumentDto[]>("/documents", userId),
+  getMe: (userId: string) => request<Me>("/me", userId),
 
-  getChapter: (userId: string, chapterId: string) =>
-    request<ChapterDetail>(`/content/${chapterId}`, userId),
+  // Admin
+  adminListPacks: (userId: string) => request<TutorPackAdminView[]>("/admin/tutor-packs", userId),
 
-  uploadDocument: (userId: string, form: FormData) =>
-    request<{ documentId: string; chapterCount: number }>("/documents", userId, {
+  adminUploadPack: (userId: string, form: FormData) =>
+    request<{ tutorPackId: string; chapterCount: number }>("/admin/tutor-packs", userId, {
       method: "POST",
       body: form,
     }),
 
-  generateSummary: (userId: string, chapterId: string) =>
-    request<{ chapterId: string; summary: string }>(`/content/${chapterId}/summary`, userId, {
+  adminPublishPack: (userId: string, tutorPackId: string) =>
+    request<TutorPackAdminView>(`/admin/tutor-packs/${tutorPackId}/publish`, userId, {
       method: "POST",
     }),
 
-  generateQuiz: (userId: string, chapterId: string) =>
-    request<{ quizId: string; questions: unknown[] }>(`/content/${chapterId}/quiz`, userId, {
+  adminGenerateSummary: (userId: string, chapterId: string) =>
+    request<{ chapterId: string; summary: string }>(
+      `/admin/chapters/${chapterId}/summary`,
+      userId,
+      { method: "POST" }
+    ),
+
+  adminGenerateQuiz: (userId: string, chapterId: string) =>
+    request<{ quizId: string; questions: QuizQuestion[] }>(
+      `/admin/chapters/${chapterId}/quiz`,
+      userId,
+      { method: "POST" }
+    ),
+
+  // Parent
+  browseTutorPacks: (userId: string) =>
+    request<TutorPackBrowseView[]>("/tutor-packs", userId),
+
+  createEnrollment: (userId: string, studentId: string, tutorPackId: string) =>
+    request<Enrollment>("/enrollments", userId, {
       method: "POST",
+      body: JSON.stringify({ studentId, tutorPackId }),
     }),
+
+  listEnrollments: (userId: string) => request<Enrollment[]>("/enrollments", userId),
+
+  getParentDashboard: (userId: string) =>
+    request<
+      {
+        studentId: string;
+        studentName: string;
+        xpointsBalance: number;
+        chapterProgress: {
+          chapterId: string;
+          chapterTitle: string;
+          latestScore: number;
+          weakTopics: string[];
+        }[];
+        weakestChapters: { chapterId: string; chapterTitle: string; latestScore: number }[];
+      }[]
+    >("/parent/dashboard", userId),
+
+  // Student
+  getPackChapters: (userId: string, tutorPackId: string) =>
+    request<{ id: string; title: string; chapters: ChapterSummary[] }>(
+      `/content/pack/${tutorPackId}`,
+      userId
+    ),
+
+  getChapter: (userId: string, chapterId: string) =>
+    request<ChapterDetail>(`/content/${chapterId}`, userId),
 
   getChatHistory: (userId: string, chapterId: string) =>
     request<{ id: string; role: string; content: string }[]>(`/chat/${chapterId}`, userId),
@@ -97,22 +173,5 @@ export const api = {
       body: JSON.stringify({ quizId, answers }),
     }),
 
-  getXpoints: (userId: string) =>
-    request<{ balance: number }>("/progress/xpoints", userId),
-
-  getParentDashboard: (userId: string) =>
-    request<
-      {
-        studentId: string;
-        studentName: string;
-        xpointsBalance: number;
-        chapterProgress: {
-          chapterId: string;
-          chapterTitle: string;
-          latestScore: number;
-          weakTopics: string[];
-        }[];
-        weakestChapters: { chapterId: string; chapterTitle: string; latestScore: number }[];
-      }[]
-    >("/parent/dashboard", userId),
+  getXpoints: (userId: string) => request<{ balance: number }>("/progress/xpoints", userId),
 };

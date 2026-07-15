@@ -1,11 +1,13 @@
 import { NextFunction, Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 
+export type AppRole = "ADMIN" | "PARENT" | "STUDENT";
+
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
-      user?: { id: string; familyId: string; role: "PARENT" | "STUDENT"; language: string };
+      user?: { id: string; familyId: string; role: AppRole; language: string };
     }
   }
 }
@@ -36,7 +38,7 @@ export async function requireUser(req: Request, res: Response, next: NextFunctio
   next();
 }
 
-export function requireRole(role: "PARENT" | "STUDENT") {
+export function requireRole(role: AppRole) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (req.user?.role !== role) {
       res.status(403).json({ error: `Requires ${role} role` });

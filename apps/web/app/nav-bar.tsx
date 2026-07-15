@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useI18n } from "../lib/i18n";
+import { useSession } from "../lib/session";
 
 export function NavBar() {
   const { t, language, setLanguage } = useI18n();
+  const { me } = useSession();
 
   return (
     <nav>
       <Link href="/">{t("appName")}</Link>
-      <Link href="/upload">{t("nav.upload")}</Link>
-      <Link href="/parent">{t("nav.parent")}</Link>
+      {me?.role === "ADMIN" && <Link href="/admin">{t("nav.admin")}</Link>}
+      {me?.role === "PARENT" && <Link href="/parent">{t("nav.parent")}</Link>}
+      {me?.role === "STUDENT" && <Link href="/student">{t("nav.student")}</Link>}
       <div className="spacer" />
       <select value={language} onChange={(e) => setLanguage(e.target.value as "en" | "ms")}>
         <option value="en">English</option>

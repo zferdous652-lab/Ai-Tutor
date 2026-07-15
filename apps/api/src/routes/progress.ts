@@ -23,7 +23,10 @@ progressRouter.post("/quiz-attempt", async (req, res) => {
   const { quizId, answers } = parsed.data;
 
   const quiz = await prisma.quiz.findFirst({
-    where: { id: quizId, chapter: { document: { familyId: req.user!.familyId } } },
+    where: {
+      id: quizId,
+      chapter: { tutorPack: { enrollments: { some: { studentId: req.user!.id } } } },
+    },
   });
   if (!quiz) {
     res.status(404).json({ error: "Quiz not found" });

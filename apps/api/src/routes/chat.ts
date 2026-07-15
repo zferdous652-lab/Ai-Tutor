@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
+import { loadEnrolledChapter } from "../lib/enrollment";
 import { requireRole, requireUser } from "../middleware/auth";
 import { InsufficientXpointsError, spendXpoints } from "../middleware/quota";
 import { estimateXpointsCost, tutorReply } from "../services/llm";
@@ -8,7 +9,8 @@ export const chatRouter = Router();
 
 chatRouter.use(requireUser, requireRole("STUDENT"));
 
-// Student chats with AI tutor (MVP step 4)
+// Live AI tutor chat — a Premium/X-Points feature. Basic Tutor Packs are pre-generated
+// content only (summary/quiz), so this is gated on the chapter's pack tier.
 chatRouter.post("/:chapterId", async (req, res) => {
   const { message } = req.body as { message?: string };
   if (!message?.trim()) {
@@ -16,11 +18,13 @@ chatRouter.post("/:chapterId", async (req, res) => {
     return;
   }
 
-  const chapter = await prisma.chapter.findFirst({
-    where: { id: req.params.chapterId, document: { familyId: req.user!.familyId } },
-  });
+  const chapter = await loadEnrolledChapter(req.params.chapterId, req.user!.id);
   if (!chapter) {
     res.status(404).json({ error: "Chapter not found" });
+    return;
+  }
+  if (chapter.tutorPack.tier === "BASIC") {
+    res.status(403).json({ error: "Chat with the AI tutor is a Premium feature" });
     return;
   }
 
@@ -60,12 +64,13 @@ chatRouter.post("/:chapterId", async (req, res) => {
 });
 
 chatRouter.get("/:chapterId", async (req, res) => {
+  const chapter = await loadEnrolledChapter(req.params.chapterId, req.user!.id);
+  if (!chapter) {
+    res.status(404).json({ error: "Chapter not found" });
+    return;
+  }
   const messages = await prisma.chatMessage.findMany({
-    where: {
-      chapterId: req.params.chapterId,
-      studentId: req.user!.id,
-      chapter: { document: { familyId: req.user!.familyId } },
-    },
+    where: { chapterId: chapter.id, studentId: req.user!.id },
     orderBy: { createdAt: "asc" },
   });
   res.json(messages);

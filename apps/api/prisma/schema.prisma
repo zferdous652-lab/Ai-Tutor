@@ -8,22 +8,29 @@ datasource db {
 }
 
 enum Role {
+  ADMIN
   PARENT
   STUDENT
 }
 
-enum DocumentStatus {
+enum TutorPackStatus {
   PROCESSING
-  READY
+  DRAFT
   FAILED
 }
 
+enum PackTier {
+  BASIC
+  PREMIUM
+  XPOINTS
+}
+
 model Family {
-  id        String     @id @default(cuid())
-  name      String
-  createdAt DateTime   @default(now())
-  users     User[]
-  documents Document[]
+  id          String       @id @default(cuid())
+  name        String
+  createdAt   DateTime     @default(now())
+  users       User[]
+  enrollments Enrollment[]
 }
 
 model User {
@@ -37,26 +44,32 @@ model User {
   chatMessages  ChatMessage[]
   quizAttempts  QuizAttempt[]
   xpointsLedger XpointsLedger[]
+  enrollments   Enrollment[]
 }
 
-model Document {
-  id        String         @id @default(cuid())
-  family    Family         @relation(fields: [familyId], references: [id])
-  familyId  String
-  title     String
-  subject   String
-  standard  String // e.g. "KSSM"
-  language  String         @default("en")
-  status    DocumentStatus @default(PROCESSING)
-  rawText   String?
-  createdAt DateTime       @default(now())
-  chapters  Chapter[]
+// A course an admin builds and publishes, e.g. "KSSM Form 1 Sejarah". Not owned by any
+// family — families get access via Enrollment. Not visible to students until publishedAt
+// is set. `tier` decides which features are available: BASIC is pre-generated content only
+// (summary/quiz/flashcards/notes), PREMIUM/XPOINTS additionally unlock live AI chat.
+model TutorPack {
+  id          String          @id @default(cuid())
+  title       String
+  subject     String
+  standard    String // e.g. "KSSM"
+  language    String          @default("en")
+  tier        PackTier        @default(BASIC)
+  status      TutorPackStatus @default(PROCESSING)
+  rawText     String?
+  publishedAt DateTime?
+  createdAt   DateTime        @default(now())
+  chapters    Chapter[]
+  enrollments Enrollment[]
 }
 
 model Chapter {
   id           String        @id @default(cuid())
-  document     Document      @relation(fields: [documentId], references: [id])
-  documentId   String
+  tutorPack    TutorPack     @relation(fields: [tutorPackId], references: [id])
+  tutorPackId  String
   order        Int
   title        String
   content      String
@@ -64,7 +77,21 @@ model Chapter {
   chatMessages ChatMessage[]
   quiz         Quiz?
 
-  @@unique([documentId, order])
+  @@unique([tutorPackId, order])
+}
+
+// A parent giving one of their children access to a published TutorPack.
+model Enrollment {
+  id          String    @id @default(cuid())
+  family      Family    @relation(fields: [familyId], references: [id])
+  familyId    String
+  student     User      @relation(fields: [studentId], references: [id])
+  studentId   String
+  tutorPack   TutorPack @relation(fields: [tutorPackId], references: [id])
+  tutorPackId String
+  createdAt   DateTime  @default(now())
+
+  @@unique([studentId, tutorPackId])
 }
 
 model Quiz {

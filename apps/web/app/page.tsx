@@ -1,23 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useSession } from "../lib/session";
 
+const ROLE_HOME: Record<string, string> = {
+  ADMIN: "/admin",
+  PARENT: "/parent",
+  STUDENT: "/student",
+};
+
 export default function HomePage() {
-  const { userId, setUserId } = useSession();
+  const { userId, me, loading, setUserId } = useSession();
   const [input, setInput] = useState("");
+  const router = useRouter();
+
+  useEffect(() => {
+    if (me) router.push(ROLE_HOME[me.role]);
+  }, [me, router]);
 
   return (
     <div className="card">
       <h1>MYTAMAN AI Tutor — Phase 1 Prototype</h1>
       <p>
         This is the internal prototype: there is no real login yet. Run{" "}
-        <code>npm run db:seed --workspace apps/api</code> once, then paste the printed{" "}
-        <strong>Parent</strong> or <strong>Student</strong> user id below to act as that user.
+        <code>npm run db:seed --workspace apps/api</code> once, then paste one of the printed
+        <strong> Admin</strong>, <strong>Parent</strong>, or <strong>Student</strong> user ids
+        below to act as that user.
       </p>
       {userId ? (
         <p>
-          Signed in as user id <code>{userId}</code>.{" "}
+          {loading ? "Signing in..." : `Signed in as user id ${userId}.`}{" "}
           <button onClick={() => setUserId(null)}>Sign out</button>
         </p>
       ) : (
@@ -35,12 +48,13 @@ export default function HomePage() {
         </div>
       )}
       <p>
-        Parents: go to <strong>Upload</strong> to add a textbook and generate summaries/quizzes.
+        <strong>Admins</strong> build and publish Tutor Packs from the Admin dashboard.
         <br />
-        Parents: go to <strong>Parent Dashboard</strong> to see weak chapters and Xpoints usage.
+        <strong>Parents</strong> browse published Tutor Packs, enroll their child, and track
+        progress from the Parent Dashboard.
         <br />
-        Students: open a chapter link from a document&apos;s chapter list on the Upload page to
-        chat with the tutor and take the quiz.
+        <strong>Students</strong> work through the Tutor Packs they&apos;re enrolled in from
+        their dashboard.
       </p>
     </div>
   );

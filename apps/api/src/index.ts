@@ -2,6 +2,7 @@ import "express-async-errors";
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import { env } from "./lib/env";
+import { prisma } from "./lib/prisma";
 import { adminRouter } from "./routes/admin";
 import { chatRouter } from "./routes/chat";
 import { contentRouter } from "./routes/content";
@@ -33,6 +34,27 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: "Internal server error" });
 });
 
-app.listen(env.port, () => {
-  console.log(`AI Tutor API listening on :${env.port}`);
-});
+// Upload processing (see routes/admin.ts) runs as a fire-and-forget in-memory async function,
+// not a real job queue — if the process restarts mid-upload (a redeploy, a crash, `docker
+// compose up --build`), the TutorPack row is left stuck at PROCESSING forever with no process
+// left to finish or fail it, and the original file bytes are gone. Reconcile on every boot so
+// a restart produces a visible, actionable FAILED pack instead of a silent zombie.
+async function reconcileOrphanedUploads(): Promise<void> {
+  const { count } = await prisma.tutorPack.updateMany({
+    where: { status: "PROCESSING" },
+    data: { status: "FAILED" },
+  });
+  if (count > 0) {
+    console.warn(
+      `[startup] marked ${count} Tutor Pack(s) FAILED that were stuck PROCESSING from a previous run — re-upload them`
+    );
+  }
+}
+
+reconcileOrphanedUploads()
+  .catch((err) => console.error("[startup] failed to reconcile orphaned uploads:", err))
+  .finally(() => {
+    app.listen(env.port, () => {
+      console.log(`AI Tutor API listening on :${env.port}`);
+    });
+  });

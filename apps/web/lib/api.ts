@@ -19,6 +19,9 @@ async function request<T>(path: string, userId: string, init?: RequestInit): Pro
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body.error ?? res.statusText);
   }
+  if (res.status === 204) {
+    return undefined as T;
+  }
   return res.json();
 }
 
@@ -102,6 +105,15 @@ export const api = {
     request<TutorPackAdminView>(`/admin/tutor-packs/${tutorPackId}/publish`, userId, {
       method: "POST",
     }),
+
+  adminRenameChapter: (userId: string, chapterId: string, title: string) =>
+    request<ChapterSummary>(`/admin/chapters/${chapterId}`, userId, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+
+  adminDeleteChapter: (userId: string, chapterId: string) =>
+    request<void>(`/admin/chapters/${chapterId}`, userId, { method: "DELETE" }),
 
   adminGenerateSummary: (userId: string, chapterId: string) =>
     request<{ chapterId: string; summary: string }>(

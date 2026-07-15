@@ -66,6 +66,8 @@ the 7 items above and defers the rest to later phases (see below).
 | Clerk / Auth0 | Skip — seeded demo users (admin, parent, student) with a dev-only auth header | Real auth (and definitely a child-safe, parent-mediated auth flow) is a dedicated piece of work; don't block the product loop on it. Must be replaced before any real user data is involved, including the ADMIN role. |
 | Flashcards / notes / mind-maps | Skip for now — Basic tier ships summary + quiz only | Additive content types on top of the same publish pipeline; not required to prove the pack/enrollment/tier model works. |
 | Per-student AI cost tracking | Skip for now — Xpoints ledger tracks spend, but not $ cost or token counts | A concrete v2 admin requirement, deferred as a fast-follow once the role/pack skeleton is stable. |
+| Async upload processing | Skip for now — upload still parses the PDF synchronously within the HTTP request | Fine for the PDFs tested so far; a genuinely large (e.g. 500-page) course PDF risks a request timeout. Tracked as the next content-pipeline fix (`claude/content-pipeline-rework` branch). |
+| Diagram/photo/map captioning | Skip for now — only the PDF's text layer is used; visual content is invisible to the pipeline | Real course PDFs (e.g. Sejarah) carry meaningful content in maps/photos/diagrams that pure text extraction discards. Planned as a one-time, admin-triggered vision-LLM captioning step merged into chapter text, so the cost is amortized across every enrolled student rather than paid per chat message. |
 | Stripe billing | Skip — Xpoints are just an integer balance in Postgres, decremented per AI call | Matches "Later part of development: no need for now" in the doc. |
 | Azure Blob Storage + CDN | Skip for MVP — uploaded PDF is parsed to text immediately and only the extracted text is persisted; the file itself is not retained | Removes a dependency (storage account + SDK) before it's needed. Add Blob Storage when re-processing of original files, previews, or non-PDF assets are required. |
 
@@ -86,8 +88,10 @@ for quota. See `apps/api/prisma/schema.prisma`.
 
 ## Golden path this MVP proves end-to-end
 
-1. Seeded admin uploads a PDF → API extracts text and splits it into naive chapters, creating a
-   draft Tutor Pack.
+1. Seeded admin uploads a PDF → API extracts it as Markdown (`@opendocsg/pdf2md`, detecting
+   headings from font size, not literal words like "Chapter"/"Bab") and splits it into
+   chapters, creating a draft Tutor Pack. Admin can rename or delete a mis-detected chapter
+   before generating content on it.
 2. Admin generates a summary and quiz per chapter via the model router, then publishes the pack.
 3. Seeded parent browses published packs and enrolls their (seeded) child.
 4. Seeded student opens an enrolled pack's chapter, reads the summary, and takes the quiz. If

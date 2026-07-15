@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { api, TutorPackAdminView } from "../../lib/api";
+import { api, ChapterSummary, TutorPackAdminView } from "../../lib/api";
 import { useSession } from "../../lib/session";
 
 export default function AdminPage() {
@@ -66,6 +66,35 @@ export default function AdminPage() {
     }
   }
 
+  async function handleRename(chapterId: string, title: string) {
+    if (!userId || !title.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.adminRenameChapter(userId, chapterId, title.trim());
+      await refresh();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(chapterId: string) {
+    if (!userId) return;
+    if (!confirm("Delete this chapter? This can't be undone.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.adminDeleteChapter(userId, chapterId);
+      await refresh();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!userId) return <p>Sign in on the home page first.</p>;
   if (sessionLoading) return <p>Loading...</p>;
   if (me?.role !== "ADMIN") return <p>This dashboard is for admins only.</p>;
@@ -118,18 +147,15 @@ export default function AdminPage() {
           </p>
           <ul>
             {pack.chapters.map((chapter) => (
-              <li key={chapter.id} style={{ marginBottom: 8 }}>
-                {chapter.title} {chapter.summary ? "✅ summarized" : ""}{" "}
-                {chapter.quiz ? "✅ quiz" : ""}
-                <div>
-                  <button disabled={busy} onClick={() => handleGenerate("summary", chapter.id)}>
-                    Generate summary
-                  </button>{" "}
-                  <button disabled={busy} onClick={() => handleGenerate("quiz", chapter.id)}>
-                    Generate quiz
-                  </button>
-                </div>
-              </li>
+              <ChapterRow
+                key={chapter.id}
+                chapter={chapter}
+                busy={busy}
+                reviewable={!pack.publishedAt}
+                onGenerate={(kind) => handleGenerate(kind, chapter.id)}
+                onRename={(title) => handleRename(chapter.id, title)}
+                onDelete={() => handleDelete(chapter.id)}
+              />
             ))}
           </ul>
           {!pack.publishedAt && (
@@ -140,5 +166,55 @@ export default function AdminPage() {
         </div>
       ))}
     </div>
+  );
+}
+
+function ChapterRow({
+  chapter,
+  busy,
+  reviewable,
+  onGenerate,
+  onRename,
+  onDelete,
+}: {
+  chapter: ChapterSummary;
+  busy: boolean;
+  reviewable: boolean;
+  onGenerate: (kind: "summary" | "quiz") => void;
+  onRename: (title: string) => void;
+  onDelete: () => void;
+}) {
+  const [title, setTitle] = useState(chapter.title);
+  const dirty = title.trim() !== chapter.title && title.trim().length > 0;
+
+  return (
+    <li style={{ marginBottom: 12 }}>
+      {reviewable ? (
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ flex: 1 }} />
+          {dirty && (
+            <button disabled={busy} onClick={() => onRename(title)}>
+              Save
+            </button>
+          )}
+          <button disabled={busy} onClick={onDelete} style={{ background: "crimson" }}>
+            Delete
+          </button>
+        </div>
+      ) : (
+        <strong>{chapter.title}</strong>
+      )}
+      <div style={{ marginTop: 4 }}>
+        {chapter.summary ? "✅ summarized" : ""} {chapter.quiz ? "✅ quiz" : ""}
+      </div>
+      <div style={{ marginTop: 4 }}>
+        <button disabled={busy} onClick={() => onGenerate("summary")}>
+          Generate summary
+        </button>{" "}
+        <button disabled={busy} onClick={() => onGenerate("quiz")}>
+          Generate quiz
+        </button>
+      </div>
+    </li>
   );
 }

@@ -55,9 +55,13 @@ content... only the personalized conversation uses live AI, for premium packs."*
 
 ```
 Admin (web)   --upload PDF-->        api /admin/tutor-packs
-                                          │  pdf-parse extracts text, naive chapter splitter
+                                          │  pdf2md extracts Markdown, headings (H1, falling
+                                          │  back to H2, falling back to equal chunks) split
+                                          │  it into chapters
                                           ▼
                                      TutorPack (draft) + Chapter rows saved
+                                          │
+              api PATCH/DELETE /admin/chapters/:id  --> human review: rename/drop a bad split
                                           │
               api /admin/chapters/:id/summary  --> model router --> Chapter.summary
               api /admin/chapters/:id/quiz      --> model router --> Quiz.questions (JSON)

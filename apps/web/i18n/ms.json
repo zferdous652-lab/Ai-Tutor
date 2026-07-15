@@ -1,0 +1,13 @@
+{
+  "appName": "Tutor AI MYTAMAN",
+  "nav.admin": "Papan Pemuka Admin",
+  "nav.parent": "Papan Pemuka Ibu Bapa",
+  "nav.student": "Papan Pemuka Pelajar",
+  "student.chat.placeholder": "Tanya tutor anda satu soalan...",
+  "student.chat.send": "Hantar",
+  "student.quiz.submit": "Hantar jawapan",
+  "student.quiz.score": "Markah",
+  "parent.weakChapters": "Bab lemah",
+  "parent.xpoints": "Baki Xpoints",
+  "parent.noWeakChapters": "Tiada bab lemah lagi — kemajuan yang baik!"
+}

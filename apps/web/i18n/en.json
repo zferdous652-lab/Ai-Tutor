@@ -1,0 +1,13 @@
+{
+  "appName": "MYTAMAN AI Tutor",
+  "nav.admin": "Admin Dashboard",
+  "nav.parent": "Parent Dashboard",
+  "nav.student": "Student Dashboard",
+  "student.chat.placeholder": "Ask your tutor a question...",
+  "student.chat.send": "Send",
+  "student.quiz.submit": "Submit answers",
+  "student.quiz.score": "Score",
+  "parent.weakChapters": "Weak chapters",
+  "parent.xpoints": "Xpoints balance",
+  "parent.noWeakChapters": "No weak chapters yet — great progress!"
+}

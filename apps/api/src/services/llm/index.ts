@@ -1,36 +1,46 @@
-import { env } from "../../lib/env";
+import { ProviderConfig } from "../../lib/env";
 import { AnthropicProvider } from "./providers/anthropic";
 import { GeminiProvider } from "./providers/gemini";
 import { OpenAIProvider } from "./providers/openai";
 import { ModelRouter } from "./router";
-import { resolveActiveProviderOrder } from "./settings";
+import { getEffectiveApiKey, resolveActiveProviderOrder } from "./settings";
 import { ChatTurn, ImagePage, LlmProvider } from "./types";
 
-function buildProvider(config: (typeof env.providers)[number]): LlmProvider {
-  switch (config.name) {
+function buildProvider(name: ProviderConfig["name"], apiKey: string): LlmProvider {
+  switch (name) {
     case "anthropic":
-      return new AnthropicProvider(config.apiKey);
+      return new AnthropicProvider(apiKey);
     case "gemini":
-      return new GeminiProvider(config.apiKey);
+      return new GeminiProvider(apiKey);
     case "openai":
-      return new OpenAIProvider(config.apiKey);
+      return new OpenAIProvider(apiKey);
   }
 }
 
-// Built once per provider that has an API key configured — SDK clients are cheap to reuse,
-// no need to recreate them per request. Which of these are actually used, and in what order,
-// is decided per-call by resolveActiveProviderOrder() so an admin can reorder/disable providers
-// at runtime (see the "Model Router Settings" admin tab) without a redeploy.
-const providerInstances = new Map<string, LlmProvider>(
-  env.providers.map((config) => [config.name, buildProvider(config)])
-);
+// SDK clients are cheap to reuse, so we cache one per provider — but the active API key can now
+// change at runtime (env var still wins, but a key can also be added/edited/removed from the
+// admin Model Router Settings tab without a redeploy), so the cache is keyed on the key's value
+// and rebuilt whenever it changes.
+const instanceCache = new Map<ProviderConfig["name"], { apiKey: string; provider: LlmProvider }>();
+
+async function getProviderInstance(name: ProviderConfig["name"]): Promise<LlmProvider | null> {
+  const apiKey = await getEffectiveApiKey(name);
+  if (!apiKey) return null;
+  const cached = instanceCache.get(name);
+  if (cached && cached.apiKey === apiKey) return cached.provider;
+  const provider = buildProvider(name, apiKey);
+  instanceCache.set(name, { apiKey, provider });
+  return provider;
+}
 
 async function getRouter(): Promise<ModelRouter> {
   const order = await resolveActiveProviderOrder();
-  const providers = order.map((name) => providerInstances.get(name)!);
+  const providers = (await Promise.all(order.map(getProviderInstance))).filter(
+    (p): p is LlmProvider => p !== null
+  );
   if (providers.length === 0) {
     throw new Error(
-      "No LLM providers are enabled. Check the admin Model Router Settings tab, or set an API key env var and redeploy."
+      "No LLM providers are enabled. Add and enable an API key from the admin Model Router Settings tab."
     );
   }
   return new ModelRouter(providers);

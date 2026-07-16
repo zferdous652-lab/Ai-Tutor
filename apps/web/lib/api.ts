@@ -97,6 +97,9 @@ export interface ProviderStatus {
   configured: boolean;
   enabled: boolean;
   priority: number | null;
+  keySource: "env" | "database" | "none";
+  keyPreview: string | null;
+  envVarName: string;
 }
 
 export const api = {
@@ -112,6 +115,17 @@ export const api = {
     request<{ providers: ProviderStatus[] }>("/admin/model-settings", userId, {
       method: "PUT",
       body: JSON.stringify({ order, disabled }),
+    }),
+
+  adminSetProviderApiKey: (userId: string, name: ProviderName, apiKey: string) =>
+    request<{ providers: ProviderStatus[] }>(`/admin/model-settings/${name}/api-key`, userId, {
+      method: "PUT",
+      body: JSON.stringify({ apiKey }),
+    }),
+
+  adminRemoveProviderApiKey: (userId: string, name: ProviderName) =>
+    request<{ providers: ProviderStatus[] }>(`/admin/model-settings/${name}/api-key`, userId, {
+      method: "DELETE",
     }),
 
   // Upload is processed in the background — this returns as soon as the pack is created

@@ -6,7 +6,12 @@ import { ALL_PROVIDER_NAMES, ProviderConfig } from "../lib/env";
 import { requireRole, requireUser } from "../middleware/auth";
 import { withTimeout } from "../lib/timeout";
 import { formatVisualContext, generateChapterQuiz, generateChapterSummary, VisualNote } from "../services/llm";
-import { getProviderStatuses, updateProviderSettings } from "../services/llm/settings";
+import {
+  getProviderStatuses,
+  removeProviderApiKey,
+  setProviderApiKey,
+  updateProviderSettings,
+} from "../services/llm/settings";
 import { extractPdfMarkdown, splitIntoChapters } from "../services/pdf";
 import { generateVisualNotes } from "../services/visualNotes";
 
@@ -283,4 +288,37 @@ adminRouter.put("/model-settings", async (req, res) => {
     (disabled ?? []) as ProviderConfig["name"][]
   );
   res.json({ providers });
+});
+
+// Lets an admin set/replace/remove a provider's API key from the UI instead of editing .env and
+// redeploying. Refused if the matching env var is already set (that always takes precedence —
+// see services/llm/settings.ts).
+adminRouter.put("/model-settings/:name/api-key", async (req, res) => {
+  const name = req.params.name;
+  if (!ALL_PROVIDER_NAMES.includes(name as ProviderConfig["name"])) {
+    res.status(400).json({ error: `provider must be one of ${ALL_PROVIDER_NAMES.join(", ")}` });
+    return;
+  }
+  const { apiKey } = req.body as { apiKey?: unknown };
+  if (typeof apiKey !== "string" || !apiKey.trim()) {
+    res.status(400).json({ error: "apiKey must be a non-empty string" });
+    return;
+  }
+  try {
+    await setProviderApiKey(name as ProviderConfig["name"], apiKey);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+  res.json({ providers: await getProviderStatuses() });
+});
+
+adminRouter.delete("/model-settings/:name/api-key", async (req, res) => {
+  const name = req.params.name;
+  if (!ALL_PROVIDER_NAMES.includes(name as ProviderConfig["name"])) {
+    res.status(400).json({ error: `provider must be one of ${ALL_PROVIDER_NAMES.join(", ")}` });
+    return;
+  }
+  await removeProviderApiKey(name as ProviderConfig["name"]);
+  res.json({ providers: await getProviderStatuses() });
 });

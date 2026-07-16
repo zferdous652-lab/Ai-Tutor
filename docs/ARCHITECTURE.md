@@ -142,13 +142,24 @@ services/llm/
                               describePageDiagrams, formatVisualContext)
 ```
 
-`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, and `OPENAI_API_KEY` are all optional, but at least one
-must be set (the API fails fast on startup otherwise, with a clear error). If more than one is
-set, `MODEL_PROVIDER_ORDER` (default `anthropic,gemini,openai`) controls which is tried first; a
-rate limit, outage, or auth failure on the first provider falls back to the next one
-automatically, so a single provider being down doesn't take the whole app down. This fallback
-order (and which configured providers are enabled) can also be changed at runtime from the admin
-"Model Router Settings" tab, without a redeploy — see the "Model router settings" section below.
+`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, and `OPENAI_API_KEY` are all optional env vars — a
+provider can instead be added (or replaced, or removed) from the admin "Model Router Settings"
+tab at runtime, no redeploy needed. If a provider's env var IS set, it always takes precedence
+over a key entered in the UI (the UI shows that provider's key field as locked in that case).
+`MODEL_PROVIDER_ORDER` (default `anthropic,gemini,openai`) controls the initial fallback
+priority for however many providers end up configured; a rate limit, outage, or auth failure on
+the first one falls back to the next automatically, so a single provider being down doesn't take
+the whole app down. Order and enabled/disabled state can also be changed at runtime from the
+"Model Router Settings" tab — see that section below.
+
+### Model router settings
+
+Provider API keys entered via the "Model Router Settings" tab are encrypted at rest
+(AES-256-GCM, see `apps/api/src/lib/crypto.ts`) in a `ProviderCredential` table, keyed by an
+optional `CREDENTIAL_ENCRYPTION_KEY` env var (recommended for production; falls back to a key
+derived from `DATABASE_URL` otherwise, with a startup warning). A separate `ModelRouterSetting`
+singleton row stores the fallback order and which providers are disabled. Neither table is
+touched by env-var-configured providers — those are always resolved from `process.env` first.
 Token counting per student (for the "measure AI cost per
 student" admin requirement), response caching, and safety filtering are the remaining AI Gateway
 pieces to add later, at the `ModelRouter` or provider level, without touching route code.

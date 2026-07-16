@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { api, ProviderName, ProviderStatus } from "../../../lib/api";
 import { useSession } from "../../../lib/session";
 
@@ -10,17 +10,24 @@ const PROVIDER_LABEL: Record<ProviderName, string> = {
   openai: "OpenAI (GPT)",
 };
 
+const PROVIDER_HINT: Record<ProviderName, string> = {
+  anthropic: "Get a key from console.anthropic.com",
+  gemini: "Get a key from Google AI Studio (aistudio.google.com)",
+  openai: "Get a key from platform.openai.com",
+};
+
 export default function ModelSettingsPage() {
   const { userId, me, loading: sessionLoading } = useSession();
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
 
   async function refresh() {
     if (!userId) return;
     const { providers } = await api.adminGetModelSettings(userId);
     setProviders(providers);
+    setLoaded(true);
   }
 
   useEffect(() => {
@@ -28,7 +35,7 @@ export default function ModelSettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, me]);
 
-  async function save(next: ProviderStatus[]) {
+  async function reorder(next: ProviderStatus[]) {
     if (!userId) return;
     setBusy(true);
     setError(null);
@@ -37,7 +44,6 @@ export default function ModelSettingsPage() {
       const disabled = next.filter((p) => !p.enabled).map((p) => p.name);
       const { providers } = await api.adminUpdateModelSettings(userId, order, disabled);
       setProviders(providers);
-      setSavedAt(Date.now());
     } catch (err) {
       setError(String(err));
     } finally {
@@ -50,12 +56,45 @@ export default function ModelSettingsPage() {
     if (target < 0 || target >= providers.length) return;
     const next = [...providers];
     [next[index], next[target]] = [next[target], next[index]];
-    save(next);
+    reorder(next);
   }
 
   function toggleEnabled(index: number) {
+    const provider = providers[index];
+    if (!provider.configured) return;
     const next = providers.map((p, i) => (i === index ? { ...p, enabled: !p.enabled } : p));
-    save(next);
+    reorder(next);
+  }
+
+  async function saveKey(name: ProviderName, apiKey: string) {
+    if (!userId || !apiKey.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { providers } = await api.adminSetProviderApiKey(userId, name, apiKey.trim());
+      setProviders(providers);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeKey(name: ProviderName) {
+    if (!userId) return;
+    if (!confirm(`Remove the saved API key for ${PROVIDER_LABEL[name]}? It will stop working until a new key is added.`)) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const { providers } = await api.adminRemoveProviderApiKey(userId, name);
+      setProviders(providers);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!userId) return <p className="state-page">Sign in on the home page first.</p>;
@@ -69,73 +108,176 @@ export default function ModelSettingsPage() {
       <div className="page-header">
         <h1>Model Router Settings</h1>
         <p>
-          Control the AI provider fallback chain. The first enabled, configured provider is tried
-          first for every summary, quiz, and chat reply; if it hits a rate limit, outage, or auth
-          failure, the router automatically falls back to the next one — no redeploy needed.
+          Add API keys and control the AI provider fallback chain. The first enabled provider is
+          tried first for every summary, quiz, and chat reply; if it hits a rate limit, outage, or
+          auth failure, the router automatically falls back to the next one.
         </p>
       </div>
 
       {error && <p className="alert alert-error">{error}</p>}
-      {enabledCount === 0 && (
+      {loaded && enabledCount === 0 && (
         <p className="alert alert-error">
-          No providers are both configured and enabled — AI generation and chat will fail until at
-          least one is turned on below.
+          No providers are enabled — add an API key below to turn AI generation and chat back on.
         </p>
       )}
 
-      <div className="card">
-        <h2>Fallback order</h2>
-        {providers.length === 0 && <div className="empty-state">Loading providers...</div>}
-        <ul className="plain">
-          {providers.map((provider, index) => (
-            <li key={provider.name} className="list-item list-item-row">
-              <div className="flex-row" style={{ alignItems: "center", gap: 8 }}>
-                <span className="badge">{provider.priority ?? "—"}</span>
-                <strong>{PROVIDER_LABEL[provider.name]}</strong>
-                {!provider.configured && (
-                  <span className="badge badge-draft">No API key configured</span>
-                )}
-                {provider.configured && (
-                  <span className={`badge ${provider.enabled ? "badge-published" : "badge-draft"}`}>
-                    {provider.enabled ? "Enabled" : "Disabled"}
-                  </span>
-                )}
-              </div>
-              <div className="flex-row" style={{ gap: 6 }}>
-                <button
-                  className="btn-secondary btn-sm"
-                  disabled={busy || index === 0}
-                  onClick={() => move(index, -1)}
-                  aria-label={`Move ${provider.name} up`}
-                >
-                  ↑
-                </button>
-                <button
-                  className="btn-secondary btn-sm"
-                  disabled={busy || index === providers.length - 1}
-                  onClick={() => move(index, 1)}
-                  aria-label={`Move ${provider.name} down`}
-                >
-                  ↓
-                </button>
-                <button
-                  className="btn-secondary btn-sm"
-                  disabled={busy || !provider.configured}
-                  onClick={() => toggleEnabled(index)}
-                >
-                  {provider.enabled ? "Disable" : "Enable"}
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-        {savedAt && !busy && !error && <p className="field-hint">Saved.</p>}
-        <p className="field-hint mt-2">
-          A provider without an API key can be reordered but can&apos;t be enabled — set its key
-          via the corresponding env var (e.g. <code>OPENAI_API_KEY</code>) and redeploy first.
-          Reordering and enabling/disabling providers, on the other hand, takes effect immediately.
-        </p>
+      {!loaded && <div className="card empty-state">Loading providers...</div>}
+
+      {providers.map((provider, index) => (
+        <ProviderCard
+          key={provider.name}
+          provider={provider}
+          index={index}
+          count={providers.length}
+          busy={busy}
+          onMoveUp={() => move(index, -1)}
+          onMoveDown={() => move(index, 1)}
+          onToggleEnabled={() => toggleEnabled(index)}
+          onSaveKey={(key) => saveKey(provider.name, key)}
+          onRemoveKey={() => removeKey(provider.name)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function ProviderCard({
+  provider,
+  index,
+  count,
+  busy,
+  onMoveUp,
+  onMoveDown,
+  onToggleEnabled,
+  onSaveKey,
+  onRemoveKey,
+}: {
+  provider: ProviderStatus;
+  index: number;
+  count: number;
+  busy: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onToggleEnabled: () => void;
+  onSaveKey: (apiKey: string) => void;
+  onRemoveKey: () => void;
+}) {
+  const [keyInput, setKeyInput] = useState("");
+  const [editingKey, setEditingKey] = useState(false);
+  const lockedByEnv = provider.keySource === "env";
+
+  function handleSubmitKey(e: FormEvent) {
+    e.preventDefault();
+    if (!keyInput.trim()) return;
+    onSaveKey(keyInput);
+    setKeyInput("");
+    setEditingKey(false);
+  }
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="flex-row" style={{ alignItems: "center", gap: 8 }}>
+          <span className="badge">{provider.priority ? `Priority ${provider.priority}` : "Unused"}</span>
+          <h3 style={{ margin: 0 }}>{PROVIDER_LABEL[provider.name]}</h3>
+          <span className={`badge ${provider.enabled ? "badge-published" : "badge-draft"}`}>
+            {provider.enabled ? "Enabled" : "Disabled"}
+          </span>
+        </div>
+        <div className="flex-row" style={{ gap: 6 }}>
+          <button
+            className="btn-secondary btn-sm"
+            disabled={busy || index === 0}
+            onClick={onMoveUp}
+            aria-label={`Move ${provider.name} up`}
+          >
+            ↑
+          </button>
+          <button
+            className="btn-secondary btn-sm"
+            disabled={busy || index === count - 1}
+            onClick={onMoveDown}
+            aria-label={`Move ${provider.name} down`}
+          >
+            ↓
+          </button>
+          <button
+            className="btn-secondary btn-sm"
+            disabled={busy || !provider.configured}
+            onClick={onToggleEnabled}
+          >
+            {provider.enabled ? "Disable" : "Enable"}
+          </button>
+        </div>
       </div>
+
+      {provider.configured ? (
+        <div className="card-meta" style={{ marginBottom: 0 }}>
+          <span>
+            API key: <code>{provider.keyPreview}</code>
+          </span>
+          <span className="dot">·</span>
+          <span>
+            {lockedByEnv ? (
+              <>Set via <code>{provider.envVarName}</code> env var</>
+            ) : (
+              "Saved from this dashboard"
+            )}
+          </span>
+        </div>
+      ) : (
+        <p className="field-hint" style={{ marginTop: 0 }}>
+          No API key configured. {PROVIDER_HINT[provider.name]}.
+        </p>
+      )}
+
+      {lockedByEnv && (
+        <p className="field-hint mt-2">
+          This key is locked by the <code>{provider.envVarName}</code> environment variable — remove
+          it from your deploy config and redeploy to manage it from here instead.
+        </p>
+      )}
+
+      {!lockedByEnv && !editingKey && (
+        <button className="btn-secondary btn-sm mt-2" disabled={busy} onClick={() => setEditingKey(true)}>
+          {provider.configured ? "Replace key" : "Add key"}
+        </button>
+      )}
+
+      {!lockedByEnv && provider.configured && (
+        <button className="btn-danger btn-sm mt-2" style={{ marginLeft: 8 }} disabled={busy} onClick={onRemoveKey}>
+          Remove key
+        </button>
+      )}
+
+      {!lockedByEnv && editingKey && (
+        <form onSubmit={handleSubmitKey} className="mt-2">
+          <div className="flex-row" style={{ gap: 6 }}>
+            <input
+              type="password"
+              autoComplete="off"
+              placeholder={`Paste ${PROVIDER_LABEL[provider.name]} API key`}
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              className="flex-1"
+            />
+            <button type="submit" className="btn-sm" disabled={busy || !keyInput.trim()}>
+              Save
+            </button>
+            <button
+              type="button"
+              className="btn-secondary btn-sm"
+              disabled={busy}
+              onClick={() => {
+                setEditingKey(false);
+                setKeyInput("");
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

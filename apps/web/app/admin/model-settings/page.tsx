@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { api, ProviderName, ProviderStatus } from "../../../lib/api";
+import { api, PromptKey, PromptSettings, ProviderName, ProviderStatus } from "../../../lib/api";
 import { useSession } from "../../../lib/session";
 
 const PROVIDER_LABEL: Record<ProviderName, string> = {
@@ -16,17 +16,46 @@ const PROVIDER_HINT: Record<ProviderName, string> = {
   openai: "Get a key from platform.openai.com",
 };
 
+const PROMPT_LABEL: Record<PromptKey, string> = {
+  summarySystemPrompt: "Chapter summaries",
+  quizSystemPrompt: "Quiz generation",
+  tutorSystemPrompt: "Live tutor chat",
+  visualSystemPrompt: "Diagram/photo captioning",
+};
+
+const PROMPT_DESCRIPTION: Record<PromptKey, string> = {
+  summarySystemPrompt: "Instructions used every time an admin generates a chapter summary.",
+  quizSystemPrompt: "Instructions used every time an admin generates a chapter quiz.",
+  tutorSystemPrompt: "The persona/behavior of the live AI tutor students chat with (Premium/Xpoints packs only).",
+  visualSystemPrompt: "Instructions used when captioning diagrams/maps/photos found in an uploaded PDF.",
+};
+
+// These two require the model to keep responding with a specific JSON shape our code parses —
+// editing tone/wording is fine, but removing the "respond with ONLY a JSON array..." instruction
+// will break generation (JSON.parse will throw on prose).
+const JSON_FORMAT_WARNING: Partial<Record<PromptKey, string>> = {
+  quizSystemPrompt:
+    'Keep the "Respond with ONLY a JSON array..." instruction and shape intact — quiz generation parses the response as JSON and will fail otherwise.',
+  visualSystemPrompt:
+    "The full instruction (including the JSON array shape) lives in the request sent alongside this text, not here — this only sets the tone/framing.",
+};
+
 export default function ModelSettingsPage() {
   const { userId, me, loading: sessionLoading } = useSession();
   const [providers, setProviders] = useState<ProviderStatus[]>([]);
+  const [prompts, setPrompts] = useState<PromptSettings | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
     if (!userId) return;
-    const { providers } = await api.adminGetModelSettings(userId);
+    const [{ providers }, { prompts }] = await Promise.all([
+      api.adminGetModelSettings(userId),
+      api.adminGetPrompts(userId),
+    ]);
     setProviders(providers);
+    setPrompts(prompts);
     setLoaded(true);
   }
 
@@ -34,6 +63,35 @@ export default function ModelSettingsPage() {
     if (me?.role === "ADMIN") refresh().catch((err) => setError(String(err)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, me]);
+
+  async function savePrompt(key: PromptKey, value: string) {
+    if (!userId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { prompts } = await api.adminUpdatePrompt(userId, key, value);
+      setPrompts(prompts);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resetPrompt(key: PromptKey) {
+    if (!userId) return;
+    if (!confirm(`Reset ${PROMPT_LABEL[key]} to the default prompt?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { prompts } = await api.adminResetPrompt(userId, key);
+      setPrompts(prompts);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function reorder(next: ProviderStatus[]) {
     if (!userId) return;
@@ -137,6 +195,26 @@ export default function ModelSettingsPage() {
           onRemoveKey={() => removeKey(provider.name)}
         />
       ))}
+
+      <div className="page-header mt-4">
+        <h2>AI system prompts</h2>
+        <p>
+          Tune what each AI operation is instructed to do — tutor tone, summary style, quiz
+          framing — without a code change or redeploy.
+        </p>
+      </div>
+
+      {prompts &&
+        (Object.keys(PROMPT_LABEL) as PromptKey[]).map((key) => (
+          <PromptCard
+            key={key}
+            promptKey={key}
+            value={prompts[key]}
+            busy={busy}
+            onSave={(value) => savePrompt(key, value)}
+            onReset={() => resetPrompt(key)}
+          />
+        ))}
     </div>
   );
 }
@@ -278,6 +356,61 @@ function ProviderCard({
           </div>
         </form>
       )}
+    </div>
+  );
+}
+
+function PromptCard({
+  promptKey,
+  value,
+  busy,
+  onSave,
+  onReset,
+}: {
+  promptKey: PromptKey;
+  value: string;
+  busy: boolean;
+  onSave: (value: string) => void;
+  onReset: () => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const dirty = draft.trim() !== value.trim();
+  const warning = JSON_FORMAT_WARNING[promptKey];
+
+  // Keep the textarea in sync whenever `value` changes from a server response (after a save or
+  // reset) — useState's initial value only applies on mount, so without this a reset would leave
+  // stale text in the box.
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  return (
+    <div className="card">
+      <h3 style={{ margin: 0 }}>{PROMPT_LABEL[promptKey]}</h3>
+      <p className="field-hint" style={{ marginTop: 4 }}>
+        {PROMPT_DESCRIPTION[promptKey]}
+      </p>
+      {warning && <p className="alert alert-error mt-2">{warning}</p>}
+      <textarea
+        className="mt-2"
+        rows={4}
+        style={{ width: "100%", fontFamily: "inherit", resize: "vertical" }}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <div className="flex-row mt-2">
+        <button disabled={busy || !dirty || !draft.trim()} onClick={() => onSave(draft)}>
+          Save
+        </button>
+        {dirty && (
+          <button className="btn-secondary" disabled={busy} onClick={() => setDraft(value)}>
+            Discard changes
+          </button>
+        )}
+        <button className="btn-ghost btn-sm" disabled={busy} onClick={onReset}>
+          Reset to default
+        </button>
+      </div>
     </div>
   );
 }

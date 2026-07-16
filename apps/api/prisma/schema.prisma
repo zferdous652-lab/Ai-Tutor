@@ -152,6 +152,18 @@ model ModelRouterSetting {
   updatedAt         DateTime @updatedAt
 }
 
+// Singleton row (id is always "singleton") holding the editable AI system prompts, so an admin
+// can tune tutor tone/behavior from the "Model Router Settings" tab without a code change or
+// redeploy. Seeded from services/llm/prompts.ts's DEFAULT_PROMPTS the first time it's read.
+model PromptSetting {
+  id                  String   @id @default("singleton")
+  summarySystemPrompt String
+  quizSystemPrompt    String
+  tutorSystemPrompt   String
+  visualSystemPrompt  String
+  updatedAt           DateTime @updatedAt
+}
+
 // API key entered via the admin "Model Router Settings" UI, encrypted at rest (AES-256-GCM,
 // see lib/crypto.ts). Only used when the matching env var (e.g. ANTHROPIC_API_KEY) is NOT set —
 // an env var always takes precedence, so a key set here can be safely overridden by deploy

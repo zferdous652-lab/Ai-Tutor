@@ -6,6 +6,7 @@ import { ALL_PROVIDER_NAMES, ProviderConfig } from "../lib/env";
 import { requireRole, requireUser } from "../middleware/auth";
 import { withTimeout } from "../lib/timeout";
 import { formatVisualContext, generateChapterQuiz, generateChapterSummary, VisualNote } from "../services/llm";
+import { getPrompts, PROMPT_KEYS, PromptKey, resetPrompt, updatePrompt } from "../services/llm/prompts";
 import {
   getProviderStatuses,
   removeProviderApiKey,
@@ -341,4 +342,44 @@ adminRouter.delete("/model-settings/:name/api-key", async (req, res) => {
   }
   await removeProviderApiKey(name as ProviderConfig["name"]);
   res.json({ providers: await getProviderStatuses() });
+});
+
+// System prompts: lets an admin tune AI tone/behavior (tutor style, quiz difficulty framing,
+// etc.) from the UI instead of a code change + redeploy. Each of the 4 operations' persona
+// instruction is stored separately — dynamic parts (chapter content, language) are always
+// spliced in by services/llm/index.ts, never stored here.
+adminRouter.get("/prompt-settings", async (_req, res) => {
+  res.json({ prompts: await getPrompts() });
+});
+
+function isPromptKey(v: string): v is PromptKey {
+  return (PROMPT_KEYS as string[]).includes(v);
+}
+
+adminRouter.put("/prompt-settings/:key", async (req, res) => {
+  const key = req.params.key;
+  if (!isPromptKey(key)) {
+    res.status(400).json({ error: `key must be one of ${PROMPT_KEYS.join(", ")}` });
+    return;
+  }
+  const { value } = req.body as { value?: unknown };
+  if (typeof value !== "string" || !value.trim()) {
+    res.status(400).json({ error: "value must be a non-empty string" });
+    return;
+  }
+  try {
+    const prompts = await updatePrompt(key, value);
+    res.json({ prompts });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+adminRouter.post("/prompt-settings/:key/reset", async (req, res) => {
+  const key = req.params.key;
+  if (!isPromptKey(key)) {
+    res.status(400).json({ error: `key must be one of ${PROMPT_KEYS.join(", ")}` });
+    return;
+  }
+  res.json({ prompts: await resetPrompt(key) });
 });

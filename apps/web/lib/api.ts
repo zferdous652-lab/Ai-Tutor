@@ -124,6 +124,14 @@ export interface ProviderStatus {
   envVarName: string;
 }
 
+export type PromptKey =
+  | "summarySystemPrompt"
+  | "quizSystemPrompt"
+  | "tutorSystemPrompt"
+  | "visualSystemPrompt";
+
+export type PromptSettings = Record<PromptKey, string>;
+
 export const api = {
   getMe: (userId: string) => request<Me>("/me", userId),
 
@@ -151,6 +159,20 @@ export const api = {
   adminRemoveProviderApiKey: (userId: string, name: ProviderName) =>
     request<{ providers: ProviderStatus[] }>(`/admin/model-settings/${name}/api-key`, userId, {
       method: "DELETE",
+    }),
+
+  adminGetPrompts: (userId: string) =>
+    request<{ prompts: PromptSettings }>("/admin/prompt-settings", userId),
+
+  adminUpdatePrompt: (userId: string, key: PromptKey, value: string) =>
+    request<{ prompts: PromptSettings }>(`/admin/prompt-settings/${key}`, userId, {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    }),
+
+  adminResetPrompt: (userId: string, key: PromptKey) =>
+    request<{ prompts: PromptSettings }>(`/admin/prompt-settings/${key}/reset`, userId, {
+      method: "POST",
     }),
 
   // Upload is processed in the background — this returns as soon as the pack is created

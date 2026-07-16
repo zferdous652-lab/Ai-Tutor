@@ -26,11 +26,12 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/mytaman?schema=public
-      # At least one of these two must be set in .env, or the api container will exit on
+      # At least one of these must be set in .env, or the api container will exit on
       # startup with a clear error — see docs/AZURE_DEPLOYMENT.md.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      MODEL_PROVIDER_ORDER: ${MODEL_PROVIDER_ORDER:-anthropic,gemini}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      MODEL_PROVIDER_ORDER: ${MODEL_PROVIDER_ORDER:-anthropic,gemini,openai}
       PORT: 4000
     ports:
       - "4000:4000"

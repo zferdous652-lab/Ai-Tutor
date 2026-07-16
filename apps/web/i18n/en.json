@@ -1,6 +1,7 @@
 {
   "appName": "MYTAMAN AI Tutor",
   "nav.admin": "Admin Dashboard",
+  "nav.modelSettings": "Model Router Settings",
   "nav.parent": "Parent Dashboard",
   "nav.student": "Student Dashboard",
   "student.chat.placeholder": "Ask your tutor a question...",

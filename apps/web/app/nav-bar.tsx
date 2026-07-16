@@ -16,6 +16,9 @@ export function NavBar() {
       </Link>
       <div className="nav-links">
         {me?.role === "ADMIN" && <Link href="/admin">{t("nav.admin")}</Link>}
+        {me?.role === "ADMIN" && (
+          <Link href="/admin/model-settings">{t("nav.modelSettings")}</Link>
+        )}
         {me?.role === "PARENT" && <Link href="/parent">{t("nav.parent")}</Link>}
         {me?.role === "STUDENT" && <Link href="/student">{t("nav.student")}</Link>}
       </div>

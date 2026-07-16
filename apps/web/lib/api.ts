@@ -90,11 +90,29 @@ export interface Enrollment {
   student: { id: string; name: string };
 }
 
+export type ProviderName = "anthropic" | "gemini" | "openai";
+
+export interface ProviderStatus {
+  name: ProviderName;
+  configured: boolean;
+  enabled: boolean;
+  priority: number | null;
+}
+
 export const api = {
   getMe: (userId: string) => request<Me>("/me", userId),
 
   // Admin
   adminListPacks: (userId: string) => request<TutorPackAdminView[]>("/admin/tutor-packs", userId),
+
+  adminGetModelSettings: (userId: string) =>
+    request<{ providers: ProviderStatus[] }>("/admin/model-settings", userId),
+
+  adminUpdateModelSettings: (userId: string, order: ProviderName[], disabled: ProviderName[]) =>
+    request<{ providers: ProviderStatus[] }>("/admin/model-settings", userId, {
+      method: "PUT",
+      body: JSON.stringify({ order, disabled }),
+    }),
 
   // Upload is processed in the background — this returns as soon as the pack is created
   // (status PROCESSING), not once chapters exist. Poll adminListPacks for status/chapters.

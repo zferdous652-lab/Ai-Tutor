@@ -1,6 +1,7 @@
 {
   "appName": "Tutor AI MYTAMAN",
   "nav.admin": "Papan Pemuka Admin",
+  "nav.modelSettings": "Tetapan Penghala Model",
   "nav.parent": "Papan Pemuka Ibu Bapa",
   "nav.student": "Papan Pemuka Pelajar",
   "student.chat.placeholder": "Tanya tutor anda satu soalan...",

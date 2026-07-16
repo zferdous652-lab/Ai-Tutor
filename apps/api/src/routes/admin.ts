@@ -2,9 +2,11 @@ import { Prisma } from "@prisma/client";
 import { Router } from "express";
 import multer from "multer";
 import { prisma } from "../lib/prisma";
+import { ALL_PROVIDER_NAMES, ProviderConfig } from "../lib/env";
 import { requireRole, requireUser } from "../middleware/auth";
 import { withTimeout } from "../lib/timeout";
 import { formatVisualContext, generateChapterQuiz, generateChapterSummary, VisualNote } from "../services/llm";
+import { getProviderStatuses, updateProviderSettings } from "../services/llm/settings";
 import { extractPdfMarkdown, splitIntoChapters } from "../services/pdf";
 import { generateVisualNotes } from "../services/visualNotes";
 
@@ -251,4 +253,34 @@ adminRouter.post("/chapters/:chapterId/quiz", async (req, res) => {
     update: { questions: questionsJson },
   });
   res.json({ quizId: quiz.id, questions: quiz.questions });
+});
+
+// Model Router Settings: lets an admin reorder the LLM fallback chain and enable/disable
+// individual providers at runtime — never stores API keys, only which of the env-configured
+// providers to use and in what order. Takes effect on the next LLM call, no redeploy needed.
+adminRouter.get("/model-settings", async (_req, res) => {
+  res.json({ providers: await getProviderStatuses() });
+});
+
+adminRouter.put("/model-settings", async (req, res) => {
+  const { order, disabled } = req.body as { order?: unknown; disabled?: unknown };
+  if (!Array.isArray(order) || !order.every((v) => typeof v === "string")) {
+    res.status(400).json({ error: "order must be a string array" });
+    return;
+  }
+  if (disabled !== undefined && (!Array.isArray(disabled) || !disabled.every((v) => typeof v === "string"))) {
+    res.status(400).json({ error: "disabled must be a string array" });
+    return;
+  }
+  const isProviderName = (v: string): v is ProviderConfig["name"] =>
+    ALL_PROVIDER_NAMES.includes(v as ProviderConfig["name"]);
+  if (!order.every(isProviderName) || !(disabled ?? []).every(isProviderName)) {
+    res.status(400).json({ error: `provider names must be one of ${ALL_PROVIDER_NAMES.join(", ")}` });
+    return;
+  }
+  const providers = await updateProviderSettings(
+    order as ProviderConfig["name"][],
+    (disabled ?? []) as ProviderConfig["name"][]
+  );
+  res.json({ providers });
 });

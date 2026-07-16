@@ -137,3 +137,17 @@ model XpointsLedger {
   reason    String
   createdAt DateTime @default(now())
 }
+
+// Singleton row (id is always "singleton") letting an admin change the LLM fallback order and
+// enable/disable individual providers at runtime, without editing env vars or redeploying.
+// Only covers providers that actually have an API key configured via env vars — this never
+// stores secrets.
+model ModelRouterSetting {
+  id                String   @id @default("singleton")
+  // Ordered provider names, e.g. ["anthropic", "gemini", "openai"]. Providers with no API key
+  // configured are ignored even if listed here.
+  providerOrder     String[]
+  // Provider names an admin has manually turned off, even though an API key is configured.
+  disabledProviders String[]
+  updatedAt         DateTime @updatedAt
+}

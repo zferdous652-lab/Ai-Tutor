@@ -1,7 +1,9 @@
 import { env } from "../../lib/env";
 import { AnthropicProvider } from "./providers/anthropic";
 import { GeminiProvider } from "./providers/gemini";
+import { OpenAIProvider } from "./providers/openai";
 import { ModelRouter } from "./router";
+import { resolveActiveProviderOrder } from "./settings";
 import { ChatTurn, ImagePage, LlmProvider } from "./types";
 
 function buildProvider(config: (typeof env.providers)[number]): LlmProvider {
@@ -10,10 +12,29 @@ function buildProvider(config: (typeof env.providers)[number]): LlmProvider {
       return new AnthropicProvider(config.apiKey);
     case "gemini":
       return new GeminiProvider(config.apiKey);
+    case "openai":
+      return new OpenAIProvider(config.apiKey);
   }
 }
 
-const router = new ModelRouter(env.providers.map(buildProvider));
+// Built once per provider that has an API key configured — SDK clients are cheap to reuse,
+// no need to recreate them per request. Which of these are actually used, and in what order,
+// is decided per-call by resolveActiveProviderOrder() so an admin can reorder/disable providers
+// at runtime (see the "Model Router Settings" admin tab) without a redeploy.
+const providerInstances = new Map<string, LlmProvider>(
+  env.providers.map((config) => [config.name, buildProvider(config)])
+);
+
+async function getRouter(): Promise<ModelRouter> {
+  const order = await resolveActiveProviderOrder();
+  const providers = order.map((name) => providerInstances.get(name)!);
+  if (providers.length === 0) {
+    throw new Error(
+      "No LLM providers are enabled. Check the admin Model Router Settings tab, or set an API key env var and redeploy."
+    );
+  }
+  return new ModelRouter(providers);
+}
 
 function languageInstruction(language: string): string {
   return language === "ms" ? "Respond in Bahasa Malaysia." : "Respond in English.";
@@ -37,7 +58,7 @@ export async function generateChapterSummary(
   language: string,
   visualContext?: string
 ): Promise<string> {
-  return router.generateText({
+  return (await getRouter()).generateText({
     system: `You are an assistant that writes clear, age-appropriate chapter summaries for school
 students. ${languageInstruction(language)}`,
     messages: [
@@ -63,7 +84,7 @@ export async function generateChapterQuiz(
   language: string,
   visualContext?: string
 ): Promise<QuizQuestion[]> {
-  const text = await router.generateText({
+  const text = await (await getRouter()).generateText({
     system: `You generate multiple-choice quizzes for school students. ${languageInstruction(
       language
     )} Respond with ONLY a JSON array, no prose, matching this shape:
@@ -96,7 +117,7 @@ export async function tutorReply(
     { role: "user" as const, content: studentMessage },
   ];
 
-  return router.generateText({
+  return (await getRouter()).generateText({
     system: `You are a patient Socratic tutor helping a student understand this chapter:
 
 ${withVisualContext(chapterContent, visualContext)}
@@ -130,7 +151,7 @@ export async function describePageDiagrams(
   images: ImagePage[],
   language: string
 ): Promise<VisualNote[]> {
-  const text = await router.describeImages({
+  const text = await (await getRouter()).describeImages({
     system: `You analyze textbook pages for a school course. ${languageInstruction(language)}`,
     prompt: `Each image is one page of a textbook, labeled with its page number below. For each
 page that contains a diagram, map, photo, chart, or illustration, write a short (1-3 sentence)

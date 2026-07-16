@@ -272,6 +272,23 @@ a.btn-danger {
   box-shadow: 0 0 0 1px rgba(251, 113, 133, 0.4), 0 8px 24px rgba(251, 113, 133, 0.25);
 }
 
+/* Used for a "Generate X" action once it's already been done — same slot, same click target
+   (still regenerates on click), just visually confirms the done state instead of showing a
+   separate "Summarized" badge alongside a neutral button. */
+button.btn-success,
+a.btn-success {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  box-shadow: none;
+}
+
+button.btn-success:hover:not(:disabled),
+a.btn-success:hover {
+  background: rgba(52, 211, 153, 0.22);
+  filter: none;
+}
+
 button.btn-ghost,
 a.btn-ghost {
   background: transparent;

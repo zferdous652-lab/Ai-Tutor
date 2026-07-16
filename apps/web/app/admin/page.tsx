@@ -291,16 +291,20 @@ function ChapterRow({
       ) : (
         <strong>{chapter.title}</strong>
       )}
-      <div className="card-meta mt-2" style={{ marginBottom: 0 }}>
-        {chapter.summary && <span className="badge badge-published">Summarized</span>}
-        {chapter.quiz && <span className="badge badge-published">Quiz ready</span>}
-      </div>
       <div className="flex-row mt-2">
-        <button className="btn-secondary btn-sm" disabled={busy} onClick={() => onGenerate("summary")}>
-          Generate summary
+        <button
+          className={chapter.summary ? "btn-success btn-sm" : "btn-secondary btn-sm"}
+          disabled={busy}
+          onClick={() => onGenerate("summary")}
+        >
+          {chapter.summary ? "✓ Summary generated" : "Generate summary"}
         </button>
-        <button className="btn-secondary btn-sm" disabled={busy} onClick={() => onGenerate("quiz")}>
-          Generate quiz
+        <button
+          className={chapter.quiz ? "btn-success btn-sm" : "btn-secondary btn-sm"}
+          disabled={busy}
+          onClick={() => onGenerate("quiz")}
+        >
+          {chapter.quiz ? "✓ Quiz generated" : "Generate quiz"}
         </button>
       </div>
     </li>

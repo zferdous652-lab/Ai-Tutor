@@ -47,55 +47,74 @@ export default function ParentDashboardPage() {
     }
   }
 
-  if (!userId) return <p>Sign in on the home page first.</p>;
-  if (sessionLoading) return <p>Loading...</p>;
-  if (me?.role !== "PARENT") return <p>This dashboard is for parents only.</p>;
+  if (!userId) return <p className="state-page">Sign in on the home page first.</p>;
+  if (sessionLoading) return <p className="state-page">Loading...</p>;
+  if (me?.role !== "PARENT") return <p className="state-page">This dashboard is for parents only.</p>;
 
   const isEnrolled = (studentId: string, tutorPackId: string) =>
     enrollments.some((e) => e.studentId === studentId && e.tutorPackId === tutorPackId);
 
   return (
     <div>
-      {error && <p style={{ color: "crimson" }}>{error}</p>}
+      <div className="page-header">
+        <h1>Parent dashboard</h1>
+        <p>Browse Tutor Packs, enroll your child, and track their progress.</p>
+      </div>
+
+      {error && <p className="alert alert-error">{error}</p>}
 
       <div className="card">
         <h2>Available Tutor Packs</h2>
-        {packs.length === 0 && <p>No Tutor Packs published yet — check back soon.</p>}
-        {packs.map((pack) => (
-          <div key={pack.id} style={{ marginBottom: 12 }}>
-            <strong>{pack.title}</strong> — {pack.subject} · {pack.standard} · {pack.tier}
-            <div>
-              {dashboard.map((student) => (
-                <button
-                  key={student.studentId}
-                  disabled={busy || isEnrolled(student.studentId, pack.id)}
-                  onClick={() => handleEnroll(student.studentId, pack.id)}
-                  style={{ marginRight: 8, marginTop: 4 }}
-                >
-                  {isEnrolled(student.studentId, pack.id)
-                    ? `${student.studentName} enrolled`
-                    : `Enroll ${student.studentName}`}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
+        {packs.length === 0 && (
+          <div className="empty-state">No Tutor Packs published yet — check back soon.</div>
+        )}
+        <ul className="plain">
+          {packs.map((pack) => (
+            <li key={pack.id} className="list-item">
+              <div className="card-meta" style={{ marginBottom: 6 }}>
+                <strong style={{ color: "var(--color-text)" }}>{pack.title}</strong>
+                <span className={`badge badge-${pack.tier.toLowerCase()}`}>{pack.tier}</span>
+                <span className="dot">·</span>
+                <span>{pack.subject}</span>
+                <span className="dot">·</span>
+                <span>{pack.standard}</span>
+              </div>
+              <div className="flex-row" style={{ flexWrap: "wrap" }}>
+                {dashboard.map((student) => (
+                  <button
+                    key={student.studentId}
+                    className="btn-secondary btn-sm"
+                    disabled={busy || isEnrolled(student.studentId, pack.id)}
+                    onClick={() => handleEnroll(student.studentId, pack.id)}
+                  >
+                    {isEnrolled(student.studentId, pack.id)
+                      ? `${student.studentName} enrolled`
+                      : `Enroll ${student.studentName}`}
+                  </button>
+                ))}
+              </div>
+            </li>
+          ))}
+        </ul>
       </div>
 
       {dashboard.map((student) => (
         <div key={student.studentId} className="card">
-          <h2>{student.studentName}</h2>
-          <p>
-            {t("parent.xpoints")}: {student.xpointsBalance}
-          </p>
-          <h3>{t("parent.weakChapters")}</h3>
+          <div className="card-header">
+            <h2 style={{ margin: 0 }}>{student.studentName}</h2>
+            <span className="badge badge-premium">
+              {t("parent.xpoints")}: {student.xpointsBalance}
+            </span>
+          </div>
+          <h3 className="mt-4">{t("parent.weakChapters")}</h3>
           {student.weakestChapters.length === 0 ? (
-            <p>{t("parent.noWeakChapters")}</p>
+            <div className="empty-state">{t("parent.noWeakChapters")}</div>
           ) : (
-            <ul>
+            <ul className="plain">
               {student.weakestChapters.map((c) => (
-                <li key={c.chapterId}>
-                  {c.chapterTitle} — {Math.round(c.latestScore * 100)}%
+                <li key={c.chapterId} className="list-item list-item-row">
+                  <span className="flex-1">{c.chapterTitle}</span>
+                  <span className="badge">{Math.round(c.latestScore * 100)}%</span>
                 </li>
               ))}
             </ul>

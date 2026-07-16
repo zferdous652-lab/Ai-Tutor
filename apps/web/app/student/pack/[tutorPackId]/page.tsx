@@ -19,20 +19,25 @@ export default function StudentPackPage({ params }: { params: { tutorPackId: str
     }
   }, [userId, me, params.tutorPackId]);
 
-  if (!userId) return <p>Sign in on the home page first.</p>;
-  if (sessionLoading) return <p>Loading...</p>;
-  if (me?.role !== "STUDENT") return <p>This dashboard is for students only.</p>;
-  if (error) return <p style={{ color: "crimson" }}>{error}</p>;
-  if (!pack) return <p>Loading...</p>;
+  if (!userId) return <p className="state-page">Sign in on the home page first.</p>;
+  if (sessionLoading) return <p className="state-page">Loading...</p>;
+  if (me?.role !== "STUDENT") return <p className="state-page">This dashboard is for students only.</p>;
+  if (error) return <p className="alert alert-error">{error}</p>;
+  if (!pack) return <p className="state-page">Loading...</p>;
 
   return (
     <div className="card">
       <h2>{pack.title}</h2>
-      <ul>
+      <ul className="plain">
         {pack.chapters.map((chapter) => (
-          <li key={chapter.id}>
-            <Link href={`/student/${chapter.id}`}>{chapter.title}</Link>{" "}
-            {chapter.summary ? "✅ summary" : ""} {chapter.quiz ? "✅ quiz" : ""}
+          <li key={chapter.id} className="list-item">
+            <Link href={`/student/${chapter.id}`} className="list-link">
+              {chapter.title}
+            </Link>
+            <div className="card-meta" style={{ marginTop: 6, marginBottom: 0 }}>
+              {chapter.summary && <span className="badge badge-published">Summary</span>}
+              {chapter.quiz && <span className="badge badge-published">Quiz</span>}
+            </div>
           </li>
         ))}
       </ul>

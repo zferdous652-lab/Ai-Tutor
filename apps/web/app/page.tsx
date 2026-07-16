@@ -20,21 +20,26 @@ export default function HomePage() {
   }, [me, router]);
 
   return (
-    <div className="card">
-      <h1>MYTAMAN AI Tutor — Phase 1 Prototype</h1>
-      <p>
+    <div className="auth-card">
+      <span className="eyebrow">Phase 1 Prototype</span>
+      <h1>MYTAMAN AI Tutor</h1>
+      <p className="text-muted">
         This is the internal prototype: there is no real login yet. Run{" "}
         <code>npm run db:seed --workspace apps/api</code> once, then paste one of the printed
         <strong> Admin</strong>, <strong>Parent</strong>, or <strong>Student</strong> user ids
         below to act as that user.
       </p>
       {userId ? (
-        <p>
-          {loading ? "Signing in..." : `Signed in as user id ${userId}.`}{" "}
-          <button onClick={() => setUserId(null)}>Sign out</button>
-        </p>
+        <div className="flex-row mt-4">
+          <p className="text-sm" style={{ margin: 0 }}>
+            {loading ? "Signing in..." : `Signed in as user id ${userId}.`}
+          </p>
+          <button className="btn-secondary btn-sm" onClick={() => setUserId(null)}>
+            Sign out
+          </button>
+        </div>
       ) : (
-        <div className="field">
+        <div className="field mt-4">
           <label htmlFor="userId">Demo user id</label>
           <input
             id="userId"
@@ -47,15 +52,20 @@ export default function HomePage() {
           </button>
         </div>
       )}
-      <p>
-        <strong>Admins</strong> build and publish Tutor Packs from the Admin dashboard.
-        <br />
-        <strong>Parents</strong> browse published Tutor Packs, enroll their child, and track
-        progress from the Parent Dashboard.
-        <br />
-        <strong>Students</strong> work through the Tutor Packs they&apos;re enrolled in from
-        their dashboard.
-      </p>
+      <div className="role-grid">
+        <div className="role-card">
+          <strong>Admin</strong>
+          <span>Builds and publishes Tutor Packs from the Admin dashboard.</span>
+        </div>
+        <div className="role-card">
+          <strong>Parent</strong>
+          <span>Browses published Tutor Packs, enrolls their child, and tracks progress.</span>
+        </div>
+        <div className="role-card">
+          <strong>Student</strong>
+          <span>Works through the Tutor Packs they&apos;re enrolled in.</span>
+        </div>
+      </div>
     </div>
   );
 }

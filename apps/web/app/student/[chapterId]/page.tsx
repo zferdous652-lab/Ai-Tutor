@@ -70,23 +70,23 @@ export default function StudentChapterPage({ params }: { params: { chapterId: st
     }
   }
 
-  if (!userId) return <p>Sign in on the home page first.</p>;
-  if (sessionLoading) return <p>Loading...</p>;
-  if (me?.role !== "STUDENT") return <p>This page is for students only.</p>;
-  if (error) return <p style={{ color: "crimson" }}>{error}</p>;
-  if (!chapter) return <p>Loading...</p>;
+  if (!userId) return <p className="state-page">Sign in on the home page first.</p>;
+  if (sessionLoading) return <p className="state-page">Loading...</p>;
+  if (me?.role !== "STUDENT") return <p className="state-page">This page is for students only.</p>;
+  if (error) return <p className="alert alert-error">{error}</p>;
+  if (!chapter) return <p className="state-page">Loading...</p>;
 
   return (
     <div>
       <div className="card">
         <h2>{chapter.title}</h2>
-        {chapter.summary ? <p>{chapter.summary}</p> : <p>No summary generated yet.</p>}
+        {chapter.summary ? <p>{chapter.summary}</p> : <p className="text-muted">No summary generated yet.</p>}
       </div>
 
       {chapter.tutorPack.tier === "BASIC" ? (
         <div className="card">
           <h3>Ask the AI tutor</h3>
-          <p>
+          <p className="text-muted">
             Live chat with the AI tutor is a Premium feature and isn&apos;t included in this
             Tutor Pack.
           </p>
@@ -94,14 +94,16 @@ export default function StudentChapterPage({ params }: { params: { chapterId: st
       ) : (
         <div className="card">
           <h3>Ask the AI tutor</h3>
-          {messages.map((m) => (
-            <div key={m.id} className={`chat-message ${m.role}`}>
-              {m.content}
-            </div>
-          ))}
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <div className="chat-thread">
+            {messages.map((m) => (
+              <div key={m.id} className={`chat-message ${m.role}`}>
+                {m.content}
+              </div>
+            ))}
+          </div>
+          <div className="chat-input-row">
             <input
-              style={{ flex: 1 }}
+              className="flex-1"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={t("student.chat.placeholder")}
@@ -118,10 +120,10 @@ export default function StudentChapterPage({ params }: { params: { chapterId: st
         <div className="card">
           <h3>Quiz</h3>
           {chapter.quiz.questions.map((q, qi) => (
-            <div key={qi} style={{ marginBottom: 12 }}>
-              <p>{q.question}</p>
+            <div key={qi} className="field">
+              <p style={{ fontWeight: 600, marginBottom: 6 }}>{q.question}</p>
               {q.options.map((option, oi) => (
-                <label key={oi} style={{ display: "block" }}>
+                <label key={oi} className="flex-row" style={{ marginBottom: 4 }}>
                   <input
                     type="radio"
                     name={`q${qi}`}
@@ -133,7 +135,7 @@ export default function StudentChapterPage({ params }: { params: { chapterId: st
                         return next;
                       })
                     }
-                  />{" "}
+                  />
                   {option}
                 </label>
               ))}
@@ -143,8 +145,10 @@ export default function StudentChapterPage({ params }: { params: { chapterId: st
             {t("student.quiz.submit")}
           </button>
           {result && (
-            <p>
-              {t("student.quiz.score")}: {Math.round(result.score * 100)}%
+            <p className="mt-4">
+              <span className="badge badge-premium">
+                {t("student.quiz.score")}: {Math.round(result.score * 100)}%
+              </span>
             </p>
           )}
         </div>

@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma";
 import { loadEnrolledChapter } from "../lib/enrollment";
 import { requireRole, requireUser } from "../middleware/auth";
 import { InsufficientXpointsError, spendXpoints } from "../middleware/quota";
-import { estimateXpointsCost, tutorReply } from "../services/llm";
+import { estimateXpointsCost, formatVisualContext, tutorReply, VisualNote } from "../services/llm";
 
 export const chatRouter = Router();
 
@@ -38,7 +38,8 @@ chatRouter.post("/:chapterId", async (req, res) => {
     chapter.content,
     history.map((h) => ({ role: h.role as "student" | "tutor", content: h.content })),
     message,
-    req.user!.language
+    req.user!.language,
+    formatVisualContext(chapter.tutorPack.visualNotes as VisualNote[] | null)
   );
 
   try {

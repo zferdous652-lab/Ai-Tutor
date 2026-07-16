@@ -19,6 +19,9 @@ async function request<T>(path: string, userId: string, init?: RequestInit): Pro
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body.error ?? res.statusText);
   }
+  if (res.status === 204) {
+    return undefined as T;
+  }
   return res.json();
 }
 
@@ -56,7 +59,30 @@ export interface TutorPackAdminView {
   tier: PackTier;
   status: "PROCESSING" | "DRAFT" | "FAILED";
   publishedAt: string | null;
+  visualNotes: { page: number; description: string }[] | null;
   chapters: ChapterSummary[];
+}
+
+export interface ChapterAdminDetail {
+  id: string;
+  order: number;
+  title: string;
+  content: string;
+  summary: string | null;
+  quiz: { id: string; questions: QuizQuestion[] } | null;
+}
+
+export interface TutorPackAdminDetailView {
+  id: string;
+  title: string;
+  subject: string;
+  standard: string;
+  language: string;
+  tier: PackTier;
+  status: "PROCESSING" | "DRAFT" | "FAILED";
+  publishedAt: string | null;
+  visualNotes: { page: number; description: string }[] | null;
+  chapters: ChapterAdminDetail[];
 }
 
 export interface TutorPackBrowseView {
@@ -86,22 +112,72 @@ export interface Enrollment {
   student: { id: string; name: string };
 }
 
+export type ProviderName = "anthropic" | "gemini" | "openai";
+
+export interface ProviderStatus {
+  name: ProviderName;
+  configured: boolean;
+  enabled: boolean;
+  priority: number | null;
+  keySource: "env" | "database" | "none";
+  keyPreview: string | null;
+  envVarName: string;
+}
+
 export const api = {
   getMe: (userId: string) => request<Me>("/me", userId),
 
   // Admin
   adminListPacks: (userId: string) => request<TutorPackAdminView[]>("/admin/tutor-packs", userId),
 
-  adminUploadPack: (userId: string, form: FormData) =>
-    request<{ tutorPackId: string; chapterCount: number }>("/admin/tutor-packs", userId, {
-      method: "POST",
-      body: form,
+  adminGetPack: (userId: string, tutorPackId: string) =>
+    request<TutorPackAdminDetailView>(`/admin/tutor-packs/${tutorPackId}`, userId),
+
+  adminGetModelSettings: (userId: string) =>
+    request<{ providers: ProviderStatus[] }>("/admin/model-settings", userId),
+
+  adminUpdateModelSettings: (userId: string, order: ProviderName[], disabled: ProviderName[]) =>
+    request<{ providers: ProviderStatus[] }>("/admin/model-settings", userId, {
+      method: "PUT",
+      body: JSON.stringify({ order, disabled }),
     }),
+
+  adminSetProviderApiKey: (userId: string, name: ProviderName, apiKey: string) =>
+    request<{ providers: ProviderStatus[] }>(`/admin/model-settings/${name}/api-key`, userId, {
+      method: "PUT",
+      body: JSON.stringify({ apiKey }),
+    }),
+
+  adminRemoveProviderApiKey: (userId: string, name: ProviderName) =>
+    request<{ providers: ProviderStatus[] }>(`/admin/model-settings/${name}/api-key`, userId, {
+      method: "DELETE",
+    }),
+
+  // Upload is processed in the background — this returns as soon as the pack is created
+  // (status PROCESSING), not once chapters exist. Poll adminListPacks for status/chapters.
+  adminUploadPack: (userId: string, form: FormData) =>
+    request<{ tutorPackId: string; status: TutorPackAdminView["status"] }>(
+      "/admin/tutor-packs",
+      userId,
+      { method: "POST", body: form }
+    ),
 
   adminPublishPack: (userId: string, tutorPackId: string) =>
     request<TutorPackAdminView>(`/admin/tutor-packs/${tutorPackId}/publish`, userId, {
       method: "POST",
     }),
+
+  adminDeletePack: (userId: string, tutorPackId: string) =>
+    request<void>(`/admin/tutor-packs/${tutorPackId}`, userId, { method: "DELETE" }),
+
+  adminRenameChapter: (userId: string, chapterId: string, title: string) =>
+    request<ChapterSummary>(`/admin/chapters/${chapterId}`, userId, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+
+  adminDeleteChapter: (userId: string, chapterId: string) =>
+    request<void>(`/admin/chapters/${chapterId}`, userId, { method: "DELETE" }),
 
   adminGenerateSummary: (userId: string, chapterId: string) =>
     request<{ chapterId: string; summary: string }>(

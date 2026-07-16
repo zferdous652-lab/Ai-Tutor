@@ -1,4 +1,4 @@
-import { GenerateRequest, LlmProvider, ProviderError } from "./types";
+import { DescribeImagesRequest, GenerateRequest, LlmProvider, ProviderError } from "./types";
 
 /**
  * The "Model router" from the AI Gateway architecture: holds an ordered list of providers and
@@ -15,19 +15,25 @@ export class ModelRouter {
     }
   }
 
-  async generateText(request: GenerateRequest): Promise<string> {
+  generateText(request: GenerateRequest): Promise<string> {
+    return this.tryEach((provider) => provider.generateText(request));
+  }
+
+  describeImages(request: DescribeImagesRequest): Promise<string> {
+    return this.tryEach((provider) => provider.describeImages(request));
+  }
+
+  private async tryEach(call: (provider: LlmProvider) => Promise<string>): Promise<string> {
     const errors: ProviderError[] = [];
     for (const provider of this.providers) {
       try {
-        return await provider.generateText(request);
+        return await call(provider);
       } catch (err) {
         if (!(err instanceof ProviderError)) throw err;
         console.error(`[model-router] ${err.message}, trying next provider if available`);
         errors.push(err);
       }
     }
-    throw new Error(
-      `All LLM providers failed: ${errors.map((e) => e.message).join("; ")}`
-    );
+    throw new Error(`All LLM providers failed: ${errors.map((e) => e.message).join("; ")}`);
   }
 }

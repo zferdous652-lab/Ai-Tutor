@@ -26,11 +26,16 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/mytaman?schema=public
-      # At least one of these two must be set in .env, or the api container will exit on
-      # startup with a clear error — see docs/AZURE_DEPLOYMENT.md.
+      # Optional — providers can also be added/managed later from the admin "Model Router
+      # Settings" tab, without a redeploy. Setting one here "locks" that provider's key to this
+      # value (it always takes precedence over a key entered in the UI). See docs/AZURE_DEPLOYMENT.md.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      MODEL_PROVIDER_ORDER: ${MODEL_PROVIDER_ORDER:-anthropic,gemini}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      MODEL_PROVIDER_ORDER: ${MODEL_PROVIDER_ORDER:-anthropic,gemini,openai}
+      # Encrypts provider API keys saved via the admin UI at rest. Optional but recommended —
+      # without it, a key derived from DATABASE_URL is used instead (see apps/api/src/lib/crypto.ts).
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:-}
       PORT: 4000
     ports:
       - "4000:4000"

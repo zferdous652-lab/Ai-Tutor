@@ -1,31 +1,33 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { DescribeImagesRequest, GenerateRequest, LlmProvider, ProviderError } from "../types";
 
-const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
+const DEFAULT_MODEL = "gpt-4o-mini";
 
-export class AnthropicProvider implements LlmProvider {
-  readonly name = "anthropic";
-  private client: Anthropic;
+export class OpenAIProvider implements LlmProvider {
+  readonly name = "openai";
+  private client: OpenAI;
   private model: string;
 
   constructor(apiKey: string, model: string = DEFAULT_MODEL) {
-    this.client = new Anthropic({ apiKey });
+    this.client = new OpenAI({ apiKey });
     this.model = model;
   }
 
   async generateText({ system, messages, maxTokens }: GenerateRequest): Promise<string> {
     try {
-      const message = await this.client.messages.create({
+      const completion = await this.client.chat.completions.create({
         model: this.model,
         max_tokens: maxTokens,
-        system,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        messages: [
+          { role: "system", content: system },
+          ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ],
       });
-      const block = message.content.find((c) => c.type === "text");
-      if (!block || block.type !== "text") {
+      const text = completion.choices[0]?.message?.content;
+      if (!text) {
         throw new Error("response contained no text content");
       }
-      return block.text;
+      return text;
     } catch (err) {
       throw new ProviderError(this.name, err);
     }
@@ -33,30 +35,30 @@ export class AnthropicProvider implements LlmProvider {
 
   async describeImages({ system, prompt, images, maxTokens }: DescribeImagesRequest): Promise<string> {
     try {
-      const message = await this.client.messages.create({
+      const completion = await this.client.chat.completions.create({
         model: this.model,
         max_tokens: maxTokens,
-        system,
         messages: [
+          { role: "system", content: system },
           {
             role: "user",
             content: [
+              { type: "text", text: prompt },
               ...images.map(
-                (img): Anthropic.ImageBlockParam => ({
-                  type: "image",
-                  source: { type: "base64", media_type: "image/png", data: img.base64 },
+                (img): OpenAI.Chat.Completions.ChatCompletionContentPartImage => ({
+                  type: "image_url",
+                  image_url: { url: `data:image/png;base64,${img.base64}` },
                 })
               ),
-              { type: "text", text: prompt },
             ],
           },
         ],
       });
-      const block = message.content.find((c) => c.type === "text");
-      if (!block || block.type !== "text") {
+      const text = completion.choices[0]?.message?.content;
+      if (!text) {
         throw new Error("response contained no text content");
       }
-      return block.text;
+      return text;
     } catch (err) {
       throw new ProviderError(this.name, err);
     }

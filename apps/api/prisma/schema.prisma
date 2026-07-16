@@ -60,6 +60,10 @@ model TutorPack {
   tier        PackTier        @default(BASIC)
   status      TutorPackStatus @default(PROCESSING)
   rawText     String?
+  // [{ page: number, description: string }] — diagrams/maps/photos found by rendering PDF
+  // pages to images and captioning them with a vision model. Not attributed to a specific
+  // chapter (see docs/MVP_PLAN.md); null if the admin didn't request visual analysis.
+  visualNotes Json?
   publishedAt DateTime?
   createdAt   DateTime        @default(now())
   chapters    Chapter[]
@@ -132,4 +136,28 @@ model XpointsLedger {
   delta     Int // negative = spend, positive = grant
   reason    String
   createdAt DateTime @default(now())
+}
+
+// Singleton row (id is always "singleton") letting an admin change the LLM fallback order and
+// enable/disable individual providers at runtime, without editing env vars or redeploying.
+// Only covers providers that actually have an API key configured via env vars — this never
+// stores secrets.
+model ModelRouterSetting {
+  id                String   @id @default("singleton")
+  // Ordered provider names, e.g. ["anthropic", "gemini", "openai"]. Providers with no API key
+  // configured are ignored even if listed here.
+  providerOrder     String[]
+  // Provider names an admin has manually turned off, even though an API key is configured.
+  disabledProviders String[]
+  updatedAt         DateTime @updatedAt
+}
+
+// API key entered via the admin "Model Router Settings" UI, encrypted at rest (AES-256-GCM,
+// see lib/crypto.ts). Only used when the matching env var (e.g. ANTHROPIC_API_KEY) is NOT set —
+// an env var always takes precedence, so a key set here can be safely overridden by deploy
+// config without conflicting.
+model ProviderCredential {
+  name      String   @id // "anthropic" | "gemini" | "openai"
+  apiKeyEnc String
+  updatedAt DateTime @updatedAt
 }

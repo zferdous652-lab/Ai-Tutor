@@ -202,7 +202,9 @@ export default function AdminPage() {
             </button>
           </div>
           <div className="card-meta">
-            <span className={`badge badge-${pack.status.toLowerCase()}`}>{pack.status}</span>
+            {pack.status !== "DRAFT" && (
+              <span className={`badge badge-${pack.status.toLowerCase()}`}>{pack.status}</span>
+            )}
             <span className={`badge ${pack.publishedAt ? "badge-published" : "badge-draft"}`}>
               {pack.publishedAt ? "Published" : "Draft"}
             </span>

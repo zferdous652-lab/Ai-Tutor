@@ -205,7 +205,12 @@ nav select:focus-visible {
 
 /* ---------- Buttons ---------- */
 
-button {
+/* Also matches a.btn (e.g. next/link "Review" links styled as buttons) so link-buttons get
+   identical sizing/hover/focus behavior to real <button> elements, not just the gradient fill. */
+button,
+a.btn-secondary,
+a.btn-danger,
+a.btn-ghost {
   font: inherit;
   cursor: pointer;
   border: none;
@@ -217,9 +222,15 @@ button {
   font-size: 14px;
   transition: transform 0.05s ease, box-shadow 0.2s ease, filter 0.2s ease;
   box-shadow: var(--glow-primary);
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
 }
 
-button:hover:not(:disabled) {
+button:hover:not(:disabled),
+a.btn-secondary:hover,
+a.btn-danger:hover,
+a.btn-ghost:hover {
   filter: brightness(1.08);
 }
 
@@ -227,7 +238,10 @@ button:active:not(:disabled) {
   transform: translateY(1px);
 }
 
-button:focus-visible {
+button:focus-visible,
+a.btn-secondary:focus-visible,
+a.btn-danger:focus-visible,
+a.btn-ghost:focus-visible {
   outline: 2px solid var(--color-primary-2);
   outline-offset: 2px;
 }
@@ -238,37 +252,43 @@ button:disabled {
   box-shadow: none;
 }
 
-button.btn-secondary {
+button.btn-secondary,
+a.btn-secondary {
   background: rgba(255, 255, 255, 0.06);
   color: var(--color-text);
   border: 1px solid var(--color-border-strong);
   box-shadow: none;
 }
 
-button.btn-secondary:hover:not(:disabled) {
+button.btn-secondary:hover:not(:disabled),
+a.btn-secondary:hover {
   background: rgba(255, 255, 255, 0.1);
   filter: none;
 }
 
-button.btn-danger {
+button.btn-danger,
+a.btn-danger {
   background: linear-gradient(120deg, #fb7185, #f43f5e);
   box-shadow: 0 0 0 1px rgba(251, 113, 133, 0.4), 0 8px 24px rgba(251, 113, 133, 0.25);
 }
 
-button.btn-ghost {
+button.btn-ghost,
+a.btn-ghost {
   background: transparent;
   color: var(--color-text-muted);
   box-shadow: none;
   padding: 6px 10px;
 }
 
-button.btn-ghost:hover:not(:disabled) {
+button.btn-ghost:hover:not(:disabled),
+a.btn-ghost:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--color-text);
   filter: none;
 }
 
-button.btn-sm {
+button.btn-sm,
+a.btn-sm {
   padding: 6px 12px;
   font-size: 12.5px;
   border-radius: 8px;

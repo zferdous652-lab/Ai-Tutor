@@ -63,6 +63,28 @@ export interface TutorPackAdminView {
   chapters: ChapterSummary[];
 }
 
+export interface ChapterAdminDetail {
+  id: string;
+  order: number;
+  title: string;
+  content: string;
+  summary: string | null;
+  quiz: { id: string; questions: QuizQuestion[] } | null;
+}
+
+export interface TutorPackAdminDetailView {
+  id: string;
+  title: string;
+  subject: string;
+  standard: string;
+  language: string;
+  tier: PackTier;
+  status: "PROCESSING" | "DRAFT" | "FAILED";
+  publishedAt: string | null;
+  visualNotes: { page: number; description: string }[] | null;
+  chapters: ChapterAdminDetail[];
+}
+
 export interface TutorPackBrowseView {
   id: string;
   title: string;
@@ -107,6 +129,9 @@ export const api = {
 
   // Admin
   adminListPacks: (userId: string) => request<TutorPackAdminView[]>("/admin/tutor-packs", userId),
+
+  adminGetPack: (userId: string, tutorPackId: string) =>
+    request<TutorPackAdminDetailView>(`/admin/tutor-packs/${tutorPackId}`, userId),
 
   adminGetModelSettings: (userId: string) =>
     request<{ providers: ProviderStatus[] }>("/admin/model-settings", userId),

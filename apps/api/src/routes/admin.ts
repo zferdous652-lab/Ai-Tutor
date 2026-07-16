@@ -141,6 +141,26 @@ adminRouter.get("/tutor-packs", async (_req, res) => {
   res.json(packs);
 });
 
+// Full detail for one pack's review page — unlike the list endpoint above, includes each
+// chapter's extracted content and full quiz questions (with answers), so an admin can check
+// what was generated before publishing it to students.
+adminRouter.get("/tutor-packs/:packId", async (req, res) => {
+  const pack = await prisma.tutorPack.findUnique({
+    where: { id: req.params.packId },
+    include: {
+      chapters: {
+        orderBy: { order: "asc" },
+        include: { quiz: { select: { id: true, questions: true } } },
+      },
+    },
+  });
+  if (!pack) {
+    res.status(404).json({ error: "Tutor pack not found" });
+    return;
+  }
+  res.json(pack);
+});
+
 // Human review of auto-detected chapters, before summary/quiz generation or publish: rename a
 // mis-titled chapter, or drop one the detector split incorrectly.
 adminRouter.patch("/chapters/:chapterId", async (req, res) => {

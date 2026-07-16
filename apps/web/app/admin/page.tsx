@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { api, ChapterSummary, TutorPackAdminView } from "../../lib/api";
 import { useSession } from "../../lib/session";
@@ -236,13 +237,14 @@ export default function AdminPage() {
             ))}
           </ul>
           {!pack.publishedAt && (
-            <button
-              className="mt-2"
-              disabled={busy || pack.status !== "DRAFT"}
-              onClick={() => handlePublish(pack.id)}
-            >
-              Publish for students
-            </button>
+            <div className="flex-row mt-2">
+              <Link href={`/admin/pack/${pack.id}/review`} className="btn-secondary">
+                Review content
+              </Link>
+              <button disabled={busy || pack.status !== "DRAFT"} onClick={() => handlePublish(pack.id)}>
+                Publish for students
+              </button>
+            </div>
           )}
         </div>
       ))}

@@ -177,6 +177,7 @@ nav .nav-links a {
   font-weight: 500;
   padding: 6px 12px;
   border-radius: 999px;
+  white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease;
 }
 

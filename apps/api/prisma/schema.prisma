@@ -25,6 +25,14 @@ enum PackTier {
   XPOINTS
 }
 
+// How a Tutor Pack's content was created — drives which admin page ("Generate Contents with AI"
+// vs "Pre-Set Contents Manually") lists it. AI packs go through PDF upload + extraction + model
+// generation; MANUAL packs are authored directly by an admin, no AI calls involved.
+enum PackSource {
+  AI
+  MANUAL
+}
+
 model Family {
   id          String       @id @default(cuid())
   name        String
@@ -59,6 +67,7 @@ model TutorPack {
   language    String          @default("en")
   tier        PackTier        @default(BASIC)
   status      TutorPackStatus @default(PROCESSING)
+  source      PackSource      @default(AI)
   rawText     String?
   // [{ page: number, description: string }] — diagrams/maps/photos found by rendering PDF
   // pages to images and captioning them with a vision model. Not attributed to a specific
@@ -150,6 +159,18 @@ model ModelRouterSetting {
   // Provider names an admin has manually turned off, even though an API key is configured.
   disabledProviders String[]
   updatedAt         DateTime @updatedAt
+}
+
+// Singleton row (id is always "singleton") holding the editable AI system prompts, so an admin
+// can tune tutor tone/behavior from the "Model Router Settings" tab without a code change or
+// redeploy. Seeded from services/llm/prompts.ts's DEFAULT_PROMPTS the first time it's read.
+model PromptSetting {
+  id                  String   @id @default("singleton")
+  summarySystemPrompt String
+  quizSystemPrompt    String
+  tutorSystemPrompt   String
+  visualSystemPrompt  String
+  updatedAt           DateTime @updatedAt
 }
 
 // API key entered via the admin "Model Router Settings" UI, encrypted at rest (AES-256-GCM,

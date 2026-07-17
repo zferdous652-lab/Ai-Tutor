@@ -3,6 +3,7 @@ import { AnthropicProvider } from "./providers/anthropic";
 import { GeminiProvider } from "./providers/gemini";
 import { OpenAIProvider } from "./providers/openai";
 import { ModelRouter } from "./router";
+import { getPrompts } from "./prompts";
 import { getEffectiveApiKey, resolveActiveProviderOrder } from "./settings";
 import { ChatTurn, ImagePage, LlmProvider } from "./types";
 
@@ -68,9 +69,9 @@ export async function generateChapterSummary(
   language: string,
   visualContext?: string
 ): Promise<string> {
+  const prompts = await getPrompts();
   return (await getRouter()).generateText({
-    system: `You are an assistant that writes clear, age-appropriate chapter summaries for school
-students. ${languageInstruction(language)}`,
+    system: `${prompts.summarySystemPrompt} ${languageInstruction(language)}`,
     messages: [
       {
         role: "user",
@@ -94,13 +95,9 @@ export async function generateChapterQuiz(
   language: string,
   visualContext?: string
 ): Promise<QuizQuestion[]> {
+  const prompts = await getPrompts();
   const text = await (await getRouter()).generateText({
-    system: `You generate multiple-choice quizzes for school students. ${languageInstruction(
-      language
-    )} Respond with ONLY a JSON array, no prose, matching this shape:
-[{"question": string, "options": string[4], "correctIndex": number, "topic": string}]
-"topic" is a short label (2-4 words) for the sub-topic the question tests, used later to find a
-student's weak topics.`,
+    system: `${prompts.quizSystemPrompt} ${languageInstruction(language)}`,
     messages: [
       {
         role: "user",
@@ -127,14 +124,14 @@ export async function tutorReply(
     { role: "user" as const, content: studentMessage },
   ];
 
+  const prompts = await getPrompts();
   return (await getRouter()).generateText({
-    system: `You are a patient Socratic tutor helping a student understand this chapter:
+    system: `${prompts.tutorSystemPrompt}
 
+Chapter content:
 ${withVisualContext(chapterContent, visualContext)}
 
-Guide the student toward answers with questions and hints rather than stating the answer
-outright, unless they are clearly stuck after a couple of tries or explicitly ask for the answer.
-Keep replies short (2-4 sentences). ${languageInstruction(language)}`,
+${languageInstruction(language)}`,
     messages,
     maxTokens: 500,
   });
@@ -161,8 +158,9 @@ export async function describePageDiagrams(
   images: ImagePage[],
   language: string
 ): Promise<VisualNote[]> {
+  const prompts = await getPrompts();
   const text = await (await getRouter()).describeImages({
-    system: `You analyze textbook pages for a school course. ${languageInstruction(language)}`,
+    system: `${prompts.visualSystemPrompt} ${languageInstruction(language)}`,
     prompt: `Each image is one page of a textbook, labeled with its page number below. For each
 page that contains a diagram, map, photo, chart, or illustration, write a short (1-3 sentence)
 description of what it depicts, in enough detail that someone who can't see the image would

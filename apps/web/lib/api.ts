@@ -27,6 +27,7 @@ async function request<T>(path: string, userId: string, init?: RequestInit): Pro
 
 export type Role = "ADMIN" | "PARENT" | "STUDENT";
 export type PackTier = "BASIC" | "PREMIUM" | "XPOINTS";
+export type PackSource = "AI" | "MANUAL";
 
 export interface Me {
   id: string;
@@ -58,6 +59,7 @@ export interface TutorPackAdminView {
   language: string;
   tier: PackTier;
   status: "PROCESSING" | "DRAFT" | "FAILED";
+  source: PackSource;
   publishedAt: string | null;
   visualNotes: { page: number; description: string }[] | null;
   chapters: ChapterSummary[];
@@ -80,6 +82,7 @@ export interface TutorPackAdminDetailView {
   language: string;
   tier: PackTier;
   status: "PROCESSING" | "DRAFT" | "FAILED";
+  source: PackSource;
   publishedAt: string | null;
   visualNotes: { page: number; description: string }[] | null;
   chapters: ChapterAdminDetail[];
@@ -124,6 +127,14 @@ export interface ProviderStatus {
   envVarName: string;
 }
 
+export type PromptKey =
+  | "summarySystemPrompt"
+  | "quizSystemPrompt"
+  | "tutorSystemPrompt"
+  | "visualSystemPrompt";
+
+export type PromptSettings = Record<PromptKey, string>;
+
 export const api = {
   getMe: (userId: string) => request<Me>("/me", userId),
 
@@ -151,6 +162,20 @@ export const api = {
   adminRemoveProviderApiKey: (userId: string, name: ProviderName) =>
     request<{ providers: ProviderStatus[] }>(`/admin/model-settings/${name}/api-key`, userId, {
       method: "DELETE",
+    }),
+
+  adminGetPrompts: (userId: string) =>
+    request<{ prompts: PromptSettings }>("/admin/prompt-settings", userId),
+
+  adminUpdatePrompt: (userId: string, key: PromptKey, value: string) =>
+    request<{ prompts: PromptSettings }>(`/admin/prompt-settings/${key}`, userId, {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    }),
+
+  adminResetPrompt: (userId: string, key: PromptKey) =>
+    request<{ prompts: PromptSettings }>(`/admin/prompt-settings/${key}/reset`, userId, {
+      method: "POST",
     }),
 
   // Upload is processed in the background — this returns as soon as the pack is created
@@ -192,6 +217,34 @@ export const api = {
       userId,
       { method: "POST" }
     ),
+
+  // "Pre-Set Contents Manually" — no AI/model router involved anywhere in this group.
+  adminCreateManualPack: (
+    userId: string,
+    data: { title: string; subject: string; standard: string; tier: PackTier; language?: string }
+  ) =>
+    request<TutorPackAdminView>("/admin/tutor-packs/manual", userId, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  adminCreateChapter: (userId: string, tutorPackId: string, title: string, content = "") =>
+    request<ChapterAdminDetail>(`/admin/tutor-packs/${tutorPackId}/chapters`, userId, {
+      method: "POST",
+      body: JSON.stringify({ title, content }),
+    }),
+
+  adminSetChapterSummary: (userId: string, chapterId: string, summary: string) =>
+    request<{ chapterId: string; summary: string }>(`/admin/chapters/${chapterId}/summary`, userId, {
+      method: "PUT",
+      body: JSON.stringify({ summary }),
+    }),
+
+  adminSetChapterQuiz: (userId: string, chapterId: string, questions: QuizQuestion[]) =>
+    request<{ quizId: string; questions: QuizQuestion[] }>(`/admin/chapters/${chapterId}/quiz`, userId, {
+      method: "PUT",
+      body: JSON.stringify({ questions }),
+    }),
 
   // Parent
   browseTutorPacks: (userId: string) =>

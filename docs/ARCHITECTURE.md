@@ -160,6 +160,18 @@ optional `CREDENTIAL_ENCRYPTION_KEY` env var (recommended for production; falls 
 derived from `DATABASE_URL` otherwise, with a startup warning). A separate `ModelRouterSetting`
 singleton row stores the fallback order and which providers are disabled. Neither table is
 touched by env-var-configured providers — those are always resolved from `process.env` first.
+
+The same tab also exposes the 4 system prompts used across `services/llm/index.ts`
+(`generateChapterSummary`, `generateChapterQuiz`, `tutorReply`, `describePageDiagrams`) as
+editable text, backed by a `PromptSetting` singleton row (`services/llm/prompts.ts`), seeded from
+`DEFAULT_PROMPTS` the first time it's read and resettable per-prompt. Dynamic parts (chapter
+content, visual context, the `languageInstruction()` suffix) are always spliced in by code, not
+stored. The quiz prompt's default text includes the "respond with ONLY a JSON array..." shape
+instruction `generateChapterQuiz` depends on to parse the response — that instruction is editable
+like the rest of the prompt (not separately enforced by code), so the admin UI shows an explicit
+warning against removing it. The vision prompt's JSON-shape instruction lives in the user message
+built by `describePageDiagrams` instead, not in the editable system prompt, so it can't be
+accidentally broken the same way.
 Token counting per student (for the "measure AI cost per
 student" admin requirement), response caching, and safety filtering are the remaining AI Gateway
 pieces to add later, at the `ModelRouter` or provider level, without touching route code.

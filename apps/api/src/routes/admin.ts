@@ -5,7 +5,14 @@ import { prisma } from "../lib/prisma";
 import { ALL_PROVIDER_NAMES, ProviderConfig } from "../lib/env";
 import { requireRole, requireUser } from "../middleware/auth";
 import { withTimeout } from "../lib/timeout";
-import { formatVisualContext, generateChapterQuiz, generateChapterSummary, VisualNote } from "../services/llm";
+import {
+  formatVisualContext,
+  generateChapterQuiz,
+  generateChapterSummary,
+  QuizQuestion,
+  VisualNote,
+} from "../services/llm";
+import { getPrompts, PROMPT_KEYS, PromptKey, resetPrompt, updatePrompt } from "../services/llm/prompts";
 import {
   getProviderStatuses,
   removeProviderApiKey,
@@ -128,6 +135,78 @@ async function processUpload(
     }
   }
 }
+
+// "Pre-Set Contents Manually": an admin authors a Tutor Pack's content directly, no PDF/AI
+// involved. Created straight to DRAFT (nothing to process in the background) with
+// source: MANUAL, so the admin UI can list it separately from AI-generated packs.
+adminRouter.post("/tutor-packs/manual", async (req, res) => {
+  const {
+    title,
+    subject = "Sejarah",
+    standard = "KSSM",
+    language = "en",
+    tier = "BASIC",
+  } = req.body as {
+    title?: string;
+    subject?: string;
+    standard?: string;
+    language?: string;
+    tier?: string;
+  };
+  if (!title) {
+    res.status(400).json({ error: "Missing title" });
+    return;
+  }
+  if (!VALID_TIERS.includes(tier as (typeof VALID_TIERS)[number])) {
+    res.status(400).json({ error: `tier must be one of ${VALID_TIERS.join(", ")}` });
+    return;
+  }
+  const pack = await prisma.tutorPack.create({
+    data: {
+      title,
+      subject,
+      standard,
+      language,
+      tier: tier as (typeof VALID_TIERS)[number],
+      source: "MANUAL",
+      status: "DRAFT",
+    },
+  });
+  res.status(201).json(pack);
+});
+
+// Add a chapter to a manually-authored pack — `content` is the source text an admin can
+// optionally keep for reference (e.g. pasted from a document); unlike an AI-generated pack,
+// nothing here is auto-extracted, so it defaults to empty.
+adminRouter.post("/tutor-packs/:packId/chapters", async (req, res) => {
+  const pack = await prisma.tutorPack.findUnique({ where: { id: req.params.packId } });
+  if (!pack) {
+    res.status(404).json({ error: "Tutor pack not found" });
+    return;
+  }
+  if (pack.source !== "MANUAL") {
+    res.status(400).json({ error: "Chapters can only be added by hand to a manually-created pack" });
+    return;
+  }
+  const { title, content = "" } = req.body as { title?: string; content?: string };
+  if (!title?.trim()) {
+    res.status(400).json({ error: "Missing title" });
+    return;
+  }
+  const last = await prisma.chapter.findFirst({
+    where: { tutorPackId: pack.id },
+    orderBy: { order: "desc" },
+  });
+  const chapter = await prisma.chapter.create({
+    data: {
+      tutorPackId: pack.id,
+      order: (last?.order ?? 0) + 1,
+      title: title.trim().slice(0, 120),
+      content,
+    },
+  });
+  res.status(201).json(chapter);
+});
 
 adminRouter.get("/tutor-packs", async (_req, res) => {
   const packs = await prisma.tutorPack.findMany({
@@ -280,6 +359,75 @@ adminRouter.post("/chapters/:chapterId/quiz", async (req, res) => {
   res.json({ quizId: quiz.id, questions: quiz.questions });
 });
 
+// Manual set (no AI call): used by "Pre-Set Contents Manually" to author a summary directly.
+// Works on any chapter regardless of the pack's source, so it also doubles as a way to hand-edit
+// an AI-generated summary.
+adminRouter.put("/chapters/:chapterId/summary", async (req, res) => {
+  const { summary } = req.body as { summary?: unknown };
+  if (typeof summary !== "string" || !summary.trim()) {
+    res.status(400).json({ error: "summary must be a non-empty string" });
+    return;
+  }
+  const chapter = await prisma.chapter.findUnique({ where: { id: req.params.chapterId } });
+  if (!chapter) {
+    res.status(404).json({ error: "Chapter not found" });
+    return;
+  }
+  const updated = await prisma.chapter.update({
+    where: { id: chapter.id },
+    data: { summary: summary.trim() },
+  });
+  res.json({ chapterId: updated.id, summary: updated.summary });
+});
+
+const VALID_TOPIC_MAX_LEN = 60;
+
+function isValidQuizQuestion(q: unknown): q is QuizQuestion {
+  if (!q || typeof q !== "object") return false;
+  const question = q as Record<string, unknown>;
+  return (
+    typeof question.question === "string" &&
+    question.question.trim().length > 0 &&
+    Array.isArray(question.options) &&
+    question.options.length === 4 &&
+    question.options.every((o) => typeof o === "string" && o.trim().length > 0) &&
+    typeof question.correctIndex === "number" &&
+    Number.isInteger(question.correctIndex) &&
+    question.correctIndex >= 0 &&
+    question.correctIndex <= 3 &&
+    typeof question.topic === "string" &&
+    question.topic.trim().length > 0 &&
+    question.topic.length <= VALID_TOPIC_MAX_LEN
+  );
+}
+
+// Manual set (no AI call): used by "Pre-Set Contents Manually" to author a quiz directly. Same
+// validation shape generateChapterQuiz's parsed output is expected to satisfy, so downstream
+// code (student quiz-taking, scoring) doesn't need to know whether a quiz was AI-generated or
+// hand-authored.
+adminRouter.put("/chapters/:chapterId/quiz", async (req, res) => {
+  const { questions } = req.body as { questions?: unknown };
+  if (!Array.isArray(questions) || questions.length === 0 || !questions.every(isValidQuizQuestion)) {
+    res.status(400).json({
+      error:
+        "questions must be a non-empty array of {question, options: string[4], correctIndex: 0-3, topic}",
+    });
+    return;
+  }
+  const chapter = await prisma.chapter.findUnique({ where: { id: req.params.chapterId } });
+  if (!chapter) {
+    res.status(404).json({ error: "Chapter not found" });
+    return;
+  }
+  const questionsJson = questions as unknown as Prisma.InputJsonValue;
+  const quiz = await prisma.quiz.upsert({
+    where: { chapterId: chapter.id },
+    create: { chapterId: chapter.id, questions: questionsJson },
+    update: { questions: questionsJson },
+  });
+  res.json({ quizId: quiz.id, questions: quiz.questions });
+});
+
 // Model Router Settings: lets an admin reorder the LLM fallback chain and enable/disable
 // individual providers at runtime — never stores API keys, only which of the env-configured
 // providers to use and in what order. Takes effect on the next LLM call, no redeploy needed.
@@ -341,4 +489,44 @@ adminRouter.delete("/model-settings/:name/api-key", async (req, res) => {
   }
   await removeProviderApiKey(name as ProviderConfig["name"]);
   res.json({ providers: await getProviderStatuses() });
+});
+
+// System prompts: lets an admin tune AI tone/behavior (tutor style, quiz difficulty framing,
+// etc.) from the UI instead of a code change + redeploy. Each of the 4 operations' persona
+// instruction is stored separately — dynamic parts (chapter content, language) are always
+// spliced in by services/llm/index.ts, never stored here.
+adminRouter.get("/prompt-settings", async (_req, res) => {
+  res.json({ prompts: await getPrompts() });
+});
+
+function isPromptKey(v: string): v is PromptKey {
+  return (PROMPT_KEYS as string[]).includes(v);
+}
+
+adminRouter.put("/prompt-settings/:key", async (req, res) => {
+  const key = req.params.key;
+  if (!isPromptKey(key)) {
+    res.status(400).json({ error: `key must be one of ${PROMPT_KEYS.join(", ")}` });
+    return;
+  }
+  const { value } = req.body as { value?: unknown };
+  if (typeof value !== "string" || !value.trim()) {
+    res.status(400).json({ error: "value must be a non-empty string" });
+    return;
+  }
+  try {
+    const prompts = await updatePrompt(key, value);
+    res.json({ prompts });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+adminRouter.post("/prompt-settings/:key/reset", async (req, res) => {
+  const key = req.params.key;
+  if (!isPromptKey(key)) {
+    res.status(400).json({ error: `key must be one of ${PROMPT_KEYS.join(", ")}` });
+    return;
+  }
+  res.json({ prompts: await resetPrompt(key) });
 });

@@ -88,8 +88,8 @@ for quota. See `apps/api/prisma/schema.prisma`.
 
 ## Golden path this MVP proves end-to-end
 
-1. Seeded admin uploads a PDF → API extracts it as Markdown (`@opendocsg/pdf2md`, detecting
-   headings from font size, not literal words like "Chapter"/"Bab") and splits it into
+1. Seeded admin uploads a PDF → API extracts it as Markdown (a Python `pdfplumber` subprocess,
+   detecting headings from font size, not literal words like "Chapter"/"Bab") and splits it into
    chapters, creating a draft Tutor Pack. Admin can rename or delete a mis-detected chapter
    before generating content on it.
 2. Admin generates a summary and quiz per chapter via the model router, then publishes the pack.

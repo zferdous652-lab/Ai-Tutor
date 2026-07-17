@@ -676,6 +676,8 @@ ul.plain {
 .flex-1 { flex: 1; }
 
 /* ---------- Admin sidebar (Generate with AI / Pre-Set Manually) ---------- */
+/* A real collapsible sidebar: fixed-width panel that animates down to an icon rail, state
+   persisted in localStorage (app/admin/(content)/layout.tsx) so it stays put across page loads. */
 
 .admin-shell {
   display: flex;
@@ -684,17 +686,56 @@ ul.plain {
 }
 
 .admin-sidebar {
-  flex: 0 0 190px;
+  flex: 0 0 208px;
   position: sticky;
   top: calc(var(--space-6) + 56px);
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: flex-basis 0.18s ease;
+}
+
+.admin-shell-collapsed .admin-sidebar {
+  flex-basis: 56px;
+}
+
+.admin-sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  background: transparent;
+  color: var(--color-text-faint);
+  border: none;
+  box-shadow: none;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-bottom: 2px;
+}
+
+.admin-sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-muted);
+  filter: none;
+}
+
+.admin-shell-collapsed .admin-sidebar-toggle {
+  justify-content: center;
 }
 
 .admin-sidebar a {
-  display: block;
-  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
   border-radius: var(--radius-sm);
   color: var(--color-text-muted);
   text-decoration: none;
@@ -715,6 +756,27 @@ ul.plain {
   box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.35);
 }
 
+.admin-sidebar-icon {
+  flex: 0 0 auto;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.admin-sidebar-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-shell-collapsed .admin-sidebar a {
+  justify-content: center;
+  padding: 10px;
+}
+
+.admin-shell-collapsed .admin-sidebar-label {
+  display: none;
+}
+
 .admin-shell-content {
   flex: 1;
   min-width: 0;
@@ -727,7 +789,15 @@ ul.plain {
   .chat-message { max-width: 92%; }
   .auth-card h1 { font-size: 1.75rem; }
   .admin-shell { flex-direction: column; }
-  .admin-sidebar { position: static; flex-direction: row; flex-wrap: wrap; width: 100%; }
+  .admin-sidebar,
+  .admin-shell-collapsed .admin-sidebar {
+    position: static;
+    flex-basis: auto;
+    width: 100%;
+  }
+  .admin-sidebar-toggle { display: none; }
+  .admin-shell-collapsed .admin-sidebar a { justify-content: flex-start; padding: 10px 12px; }
+  .admin-shell-collapsed .admin-sidebar-label { display: inline; }
 }
 
 @media (prefers-reduced-motion: reduce) {
